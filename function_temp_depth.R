@@ -286,8 +286,9 @@ predictions_depth_temp <- function(df){
           fProtocol = factor("VERT"), fLake = factor(random_lake))
         
         # special cases
-        if (i %in% c("Alburnus_arborella", "Barbatula_sp_Lineage_I",
-                     "Cyprinus_carpio", "Phoxinus_csikii", "Salmo_trutta")){
+        if (i %in% c("Alosa_agone", "Alburnus_arborella", "Barbatula_sp_Lineage_I",
+                     "Coregonus_sp_large_pelagic", 
+                     "Cyprinus_carpio", "Lepomis_gibbosus", "Phoxinus_csikii", "Salmo_trutta")){
           
           print(paste(data$tot_abu[1], i))
           
@@ -736,8 +737,9 @@ predictions_depth_temp <- function(df){
           fProtocol = factor("VERT"), fLake = factor(random_lake))
         
         # special cases
-        if (i %in% c("Alburnus_arborella", "Barbatula_sp_Lineage_I",
-                     "Cyprinus_carpio", "Phoxinus_csikii", "Salmo_trutta")){
+        if (i %in% c("Alosa_agone", "Alburnus_arborella", "Barbatula_sp_Lineage_I",
+                     "Coregonus_sp_large_pelagic", 
+                     "Cyprinus_carpio", "Lepomis_gibbosus", "Phoxinus_csikii", "Salmo_trutta")){
           print(i)
           
           gam_output<- gam(data = data, Presence ~ s(mean_last_7days, k = 3) + s(fLake, bs = 're')
@@ -1151,8 +1153,9 @@ stats_gamms <- function(df){
         
       
         # special cases
-        if (i %in% c("Alburnus_arborella", "Barbatula_sp_Lineage_I",
-                     "Cyprinus_carpio", "Phoxinus_csikii", "Salmo_trutta")){
+        if (i %in% c("Alosa_agone", "Alburnus_arborella", "Barbatula_sp_Lineage_I",
+                     "Coregonus_sp_large_pelagic", 
+                     "Cyprinus_carpio", "Lepomis_gibbosus", "Phoxinus_csikii", "Salmo_trutta")){
           
           print(paste(data$tot_abu[1], i))
           
@@ -1473,8 +1476,9 @@ stats_gamms <- function(df){
         # the prediction anyway
       
         # special cases
-        if (i %in% c("Alburnus_arborella", "Barbatula_sp_Lineage_I",
-                     "Cyprinus_carpio", "Phoxinus_csikii", "Salmo_trutta")){
+        if (i %in% c("Alosa_agone", "Alburnus_arborella", "Barbatula_sp_Lineage_I",
+                     "Coregonus_sp_large_pelagic", 
+                     "Cyprinus_carpio", "Lepomis_gibbosus", "Phoxinus_csikii", "Salmo_trutta")){
           print(i)
           
           gam_output<- gam(data = data, Presence ~ s(mean_last_7days, k = 3) + s(fLake, bs = 're')
