@@ -358,16 +358,13 @@ df_4 <- readRDS("data_frame_models/df_abundance_re")
 # total_models/gam_check
 # total_models/predictions
 
-#df1 and df2 are the fastest ones
-# predictions() can also be used directly with df_models -> takes longer
-# BECAUSE OF TYPO: RE RUN TEMP + DEPTH models from df1-3, df4 still needs to be run & stats overview too
-
 # DO NOT RUN NOW, RUN LATER!
 predictions_depth_temp(df_1)
 predictions_depth_temp(df_2)
 predictions_depth_temp(df_3)
 predictions_depth_temp(df_4)
 
+# issue with cottus sp po
 # statistics of the gamms
 total_models <- bind_rows(df_1, df_2, df_3, df_4)
 
@@ -400,7 +397,7 @@ AIC_testing <- function(data2, i){
                             + s(fLake, bs = 're')
                             +  s(fProtocol, bs = 're'), family = ziP())
   print(glance(model_0))
-# new models
+
 
 model1 <- gam(data = data, Presence ~ s(mean_last_7days, k = 3) + s(Depth_sample, k = 3)
                             + s(fLake, bs = 're')
@@ -435,6 +432,9 @@ AIC_testing(df_4, "Phoxinus_csikii")
 #binomial depth and temp has lowest AIC 
 AIC_testing(df_4, "Salmo_trutta")
 # binomial depth and temp lowest AIC
+
+# AIC_testing(df_4, "Cottus_sp_Po")
+# # best model is the temp, depth model
 
 # 8 models are run with binomial temp and depth
 
@@ -501,7 +501,7 @@ plot_category_predictions <- plot_pred + facet_grid(~category, labeller = as_lab
 plot_category_predictions
 
 # trying to group by category and color
-predictions_categories |>
+figure_test_2 <- predictions_categories |>
   ggplot(aes(temp, fit)) +
   geom_ribbon(aes(ymin = (fit - se.fit), ymax = (fit + se.fit), fill = factor(category)), alpha = 0.3) +
   geom_line(aes(color = factor(category))) +
@@ -511,6 +511,12 @@ predictions_categories |>
   scale_color_manual(values = mycolors1, aesthetics = c("color", "fill")) +
   xlab("Temperature") +
   ylab("Abundance")
+
+# tiff(paste("total_models/plots/draft_all_predictions.tiff", sep = ""), units="in", width = 12, height=8, res=300)
+# plot(figure_test_2)
+# 
+# # Closing the graphical device
+# dev.off()
 
 # OLD FIGURE 2
 
