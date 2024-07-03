@@ -56,7 +56,7 @@ predictions_depth_temp <- function(df){
           
           print(paste(data$tot_abu[1], i))
           
-          gam_output <- gam(data = df, Presence ~ s(mean_last_7days, k = 3) + s(Depth_sample, k = 3)
+          gam_output <- gam(data = data, Presence ~ s(mean_last_7days, k = 3) + s(Depth_sample, k = 3)
                             +  s(fProtocol, bs = 're'), family = binomial)
           
           # prepare residuals
@@ -73,7 +73,7 @@ predictions_depth_temp <- function(df){
           dev.off()
           
           # Plotting standardized residuals against predictors: depth
-          tiff_file_3 <- paste("total_models/gam_check/depth_predictor_depth", i, ".tiff", sep = "")
+          tiff_file_3 <- paste("total_models/gam_check/depth_predictor_", i, ".tiff", sep = "")
           tiff(tiff_file_3, width = 800, height = 600)
           print(plotResiduals(simulationOutput, depth_data$Depth_sample, xlab = "depth", main=NULL))
           dev.off()
@@ -89,47 +89,47 @@ predictions_depth_temp <- function(df){
           # saving the predictions
           saveRDS(pred_df, paste0("total_models/predictions/predictions_",i,".rds"))
           
-          # stats
-          glance_summary <- glance(gam_output)
-          tidy_summary <- tidy(gam_output)
-          
-          # Add species column to both summaries
-          glance_summary <- glance_summary |> 
-            mutate(species = i)
-          
-          tidy_summary <- tidy_summary |> 
-            mutate(species = i)
-          
-          # combine both
-          total_summary <- merge(tidy_summary, glance_summary)
-          
-          # Store the summary in the list
-          summ <- summary(gam_output)
-          
-          dev_explained <- summ$dev.expl
-          total_summary$deviance_explained <- dev_explained
-          
-          chi_sq <- summ[["chi.sq"]][["s(mean_last_7days)"]]
-          
-          total_summary$chi_square <- chi_sq
-          
-          p_value <- summ[["s.pv"]][1]
-          total_summary$p_value <- p_value
-          
-          edf <- summ[["edf"]][1]
-          total_summary$edf <- edf
-          
-          r_sq <- summ[["r.sq"]]
-          total_summary$r_sq <- r_sq
-          
-          model_summary[[i]] <- total_summary
+          # # stats
+          # glance_summary <- glance(gam_output)
+          # tidy_summary <- tidy(gam_output)
+          # 
+          # # Add species column to both summaries
+          # glance_summary <- glance_summary |> 
+          #   mutate(species = i)
+          # 
+          # tidy_summary <- tidy_summary |> 
+          #   mutate(species = i)
+          # 
+          # # combine both
+          # total_summary <- merge(tidy_summary, glance_summary)
+          # 
+          # # Store the summary in the list
+          # summ <- summary(gam_output)
+          # 
+          # dev_explained <- summ$dev.expl
+          # total_summary$deviance_explained <- dev_explained
+          # 
+          # chi_sq <- summ[["chi.sq"]][["s(mean_last_7days)"]]
+          # 
+          # total_summary$chi_square <- chi_sq
+          # 
+          # p_value <- summ[["s.pv"]][1]
+          # total_summary$p_value <- p_value
+          # 
+          # edf <- summ[["edf"]][1]
+          # total_summary$edf <- edf
+          # 
+          # r_sq <- summ[["r.sq"]]
+          # total_summary$r_sq <- r_sq
+          # 
+          # model_summary[[i]] <- total_summary
           
         }
         # abundance
         else if (max(data$Abundance) > 1)  {
           print(paste(data$tot_abu[1], i))
           
-          gam_output <- gam(data = df, Abundance ~ s(mean_last_7days, k = 3) + s(Depth_sample, k = 3)
+          gam_output <- gam(data = data, Abundance ~ s(mean_last_7days, k = 3) + s(Depth_sample, k = 3)
                             +  s(fProtocol, bs = 're'), family = ziP())
           
           # prepare residuals
@@ -146,7 +146,7 @@ predictions_depth_temp <- function(df){
           dev.off()
           
           # Plotting standardized residuals against predictors: depth
-          tiff_file_3 <- paste("total_models/gam_check/depth_predictor_depth", i, ".tiff", sep = "")
+          tiff_file_3 <- paste("total_models/gam_check/depth_predictor_", i, ".tiff", sep = "")
           tiff(tiff_file_3, width = 800, height = 600)
           print(plotResiduals(simulationOutput, depth_data$Depth_sample, xlab = "depth", main=NULL))
           dev.off()
@@ -162,46 +162,46 @@ predictions_depth_temp <- function(df){
           # saving the predictions
           saveRDS(pred_df, paste0("total_models/predictions/predictions_",i,".rds"))
           
-          # stats
-          glance_summary <- glance(gam_output)
-          tidy_summary <- tidy(gam_output)
-          
-          # Add species column to both summaries
-          glance_summary <- glance_summary |> 
-            mutate(species = i)
-          
-          tidy_summary <- tidy_summary |> 
-            mutate(species = i)
-          
-          # combine both
-          total_summary <- merge(tidy_summary, glance_summary)
-          
-          # Store the summary in the list
-          summ <- summary(gam_output)
-          
-          dev_explained <- summ$dev.expl
-          total_summary$deviance_explained <- dev_explained
-          
-          chi_sq <- summ[["chi.sq"]][["s(mean_last_7days)"]]
-          
-          total_summary$chi_square <- chi_sq
-          
-          p_value <- summ[["s.pv"]][1]
-          total_summary$p_value <- p_value
-          
-          edf <- summ[["edf"]][1]
-          total_summary$edf <- edf
-          
-          r_sq <- summ[["r.sq"]]
-          total_summary$r_sq <- r_sq
-          
-          model_summary[[i]] <- total_summary
+          # # stats
+          # glance_summary <- glance(gam_output)
+          # tidy_summary <- tidy(gam_output)
+          # 
+          # # Add species column to both summaries
+          # glance_summary <- glance_summary |> 
+          #   mutate(species = i)
+          # 
+          # tidy_summary <- tidy_summary |> 
+          #   mutate(species = i)
+          # 
+          # # combine both
+          # total_summary <- merge(tidy_summary, glance_summary)
+          # 
+          # # Store the summary in the list
+          # summ <- summary(gam_output)
+          # 
+          # dev_explained <- summ$dev.expl
+          # total_summary$deviance_explained <- dev_explained
+          # 
+          # chi_sq <- summ[["chi.sq"]][["s(mean_last_7days)"]]
+          # 
+          # total_summary$chi_square <- chi_sq
+          # 
+          # p_value <- summ[["s.pv"]][1]
+          # total_summary$p_value <- p_value
+          # 
+          # edf <- summ[["edf"]][1]
+          # total_summary$edf <- edf
+          # 
+          # r_sq <- summ[["r.sq"]]
+          # total_summary$r_sq <- r_sq
+          # 
+          # model_summary[[i]] <- total_summary
         }
         # binomial
         else{
           print(paste(data$tot_abu[1], i))
           
-          gam_output <- gam(data = df, Abundance ~ s(mean_last_7days, k = 3) + s(Depth_sample, k = 3)
+          gam_output <- gam(data = data, Abundance ~ s(mean_last_7days, k = 3) + s(Depth_sample, k = 3)
                             +  s(fProtocol, bs = 're'), family = binomial)
           
           # prepare residuals
@@ -218,7 +218,7 @@ predictions_depth_temp <- function(df){
           dev.off()
           
           # Plotting standardized residuals against predictors: depth
-          tiff_file_3 <- paste("total_models/gam_check/depth_predictor_depth", i, ".tiff", sep = "")
+          tiff_file_3 <- paste("total_models/gam_check/depth_predictor_", i, ".tiff", sep = "")
           tiff(tiff_file_3, width = 800, height = 600)
           print(plotResiduals(simulationOutput, depth_data$Depth_sample, xlab = "depth", main=NULL))
           dev.off()
@@ -234,40 +234,40 @@ predictions_depth_temp <- function(df){
           # saving the predictions
           saveRDS(pred_df, paste0("total_models/predictions/predictions_",i,".rds"))
           
-          # stats
-          glance_summary <- glance(gam_output)
-          tidy_summary <- tidy(gam_output)
-          
-          # Add species column to both summaries
-          glance_summary <- glance_summary |> 
-            mutate(species = i)
-          
-          tidy_summary <- tidy_summary |> 
-            mutate(species = i)
-          
-          # combine both
-          total_summary <- merge(tidy_summary, glance_summary)
-          
-          # Store the summary in the list
-          summ <- summary(gam_output)
-          
-          dev_explained <- summ$dev.expl
-          total_summary$deviance_explained <- dev_explained
-          
-          chi_sq <- summ[["chi.sq"]][["s(mean_last_7days)"]]
-          
-          total_summary$chi_square <- chi_sq
-          
-          p_value <- summ[["s.pv"]][1]
-          total_summary$p_value <- p_value
-          
-          edf <- summ[["edf"]][1]
-          total_summary$edf <- edf
-          
-          r_sq <- summ[["r.sq"]]
-          total_summary$r_sq <- r_sq
-          
-          model_summary[[i]] <- total_summary
+          # # stats
+          # glance_summary <- glance(gam_output)
+          # tidy_summary <- tidy(gam_output)
+          # 
+          # # Add species column to both summaries
+          # glance_summary <- glance_summary |> 
+          #   mutate(species = i)
+          # 
+          # tidy_summary <- tidy_summary |> 
+          #   mutate(species = i)
+          # 
+          # # combine both
+          # total_summary <- merge(tidy_summary, glance_summary)
+          # 
+          # # Store the summary in the list
+          # summ <- summary(gam_output)
+          # 
+          # dev_explained <- summ$dev.expl
+          # total_summary$deviance_explained <- dev_explained
+          # 
+          # chi_sq <- summ[["chi.sq"]][["s(mean_last_7days)"]]
+          # 
+          # total_summary$chi_square <- chi_sq
+          # 
+          # p_value <- summ[["s.pv"]][1]
+          # total_summary$p_value <- p_value
+          # 
+          # edf <- summ[["edf"]][1]
+          # total_summary$edf <- edf
+          # 
+          # r_sq <- summ[["r.sq"]]
+          # total_summary$r_sq <- r_sq
+          # 
+          # model_summary[[i]] <- total_summary
           
         }
       }
@@ -291,7 +291,7 @@ predictions_depth_temp <- function(df){
           
           print(paste(data$tot_abu[1], i))
           
-          gam_output <- gam(data = df, Presence ~ s(mean_last_7days, k = 3) + s(Depth_sample, k = 3)
+          gam_output <- gam(data = data, Presence ~ s(mean_last_7days, k = 3) + s(Depth_sample, k = 3)
                             + s(fLake, bs = 're')
                             +  s(fProtocol, bs = 're'), family = binomial)
           
@@ -309,7 +309,7 @@ predictions_depth_temp <- function(df){
           dev.off()
           
           # Plotting standardized residuals against predictors: depth
-          tiff_file_3 <- paste("total_models/gam_check/depth_predictor_depth", i, ".tiff", sep = "")
+          tiff_file_3 <- paste("total_models/gam_check/depth_predictor_", i, ".tiff", sep = "")
           tiff(tiff_file_3, width = 800, height = 600)
           print(plotResiduals(simulationOutput, depth_data$Depth_sample, xlab = "depth", main=NULL))
           dev.off()
@@ -324,47 +324,47 @@ predictions_depth_temp <- function(df){
           
           saveRDS(pred_df, paste0("total_models/predictions/predictions_",i,".rds"))
           
-          # stats
-          glance_summary <- glance(gam_output)
-          tidy_summary <- tidy(gam_output)
-          
-          # Add species column to both summaries
-          glance_summary <- glance_summary |> 
-            mutate(species = i)
-          
-          tidy_summary <- tidy_summary |> 
-            mutate(species = i)
-          
-          # combine both
-          total_summary <- merge(tidy_summary, glance_summary)
-          
-          # Store the summary in the list
-          summ <- summary(gam_output)
-          
-          dev_explained <- summ$dev.expl
-          total_summary$deviance_explained <- dev_explained
-          
-          chi_sq <- summ[["chi.sq"]][["s(mean_last_7days)"]]
-          
-          total_summary$chi_square <- chi_sq
-          
-          p_value <- summ[["s.pv"]][1]
-          total_summary$p_value <- p_value
-          
-          edf <- summ[["edf"]][1]
-          total_summary$edf <- edf
-          
-          r_sq <- summ[["r.sq"]]
-          total_summary$r_sq <- r_sq
-          
-          model_summary[[i]] <- total_summary
+          # # stats
+          # glance_summary <- glance(gam_output)
+          # tidy_summary <- tidy(gam_output)
+          # 
+          # # Add species column to both summaries
+          # glance_summary <- glance_summary |> 
+          #   mutate(species = i)
+          # 
+          # tidy_summary <- tidy_summary |> 
+          #   mutate(species = i)
+          # 
+          # # combine both
+          # total_summary <- merge(tidy_summary, glance_summary)
+          # 
+          # # Store the summary in the list
+          # summ <- summary(gam_output)
+          # 
+          # dev_explained <- summ$dev.expl
+          # total_summary$deviance_explained <- dev_explained
+          # 
+          # chi_sq <- summ[["chi.sq"]][["s(mean_last_7days)"]]
+          # 
+          # total_summary$chi_square <- chi_sq
+          # 
+          # p_value <- summ[["s.pv"]][1]
+          # total_summary$p_value <- p_value
+          # 
+          # edf <- summ[["edf"]][1]
+          # total_summary$edf <- edf
+          # 
+          # r_sq <- summ[["r.sq"]]
+          # total_summary$r_sq <- r_sq
+          # 
+          # model_summary[[i]] <- total_summary
         }
         # abundance
         else if (max(data$Abundance) > 1)  {
           
           print(paste(data$tot_abu[1], i))
           
-          gam_output <- gam(data = df, Abundance ~ s(mean_last_7days, k = 3) + s(Depth_sample, k = 3)
+          gam_output <- gam(data = data, Abundance ~ s(mean_last_7days, k = 3) + s(Depth_sample, k = 3)
                             + s(fLake, bs = 're')
                             +  s(fProtocol, bs = 're'), family = ziP())
           
@@ -382,7 +382,7 @@ predictions_depth_temp <- function(df){
           dev.off()
           
           # Plotting standardized residuals against predictors: depth
-          tiff_file_3 <- paste("total_models/gam_check/depth_predictor_depth", i, ".tiff", sep = "")
+          tiff_file_3 <- paste("total_models/gam_check/depth_predictor_", i, ".tiff", sep = "")
           tiff(tiff_file_3, width = 800, height = 600)
           print(plotResiduals(simulationOutput, depth_data$Depth_sample, xlab = "depth", main=NULL))
           dev.off()
@@ -397,47 +397,47 @@ predictions_depth_temp <- function(df){
           
           saveRDS(pred_df, paste0("total_models/predictions/predictions_",i,".rds"))
           
-          # stats
-          glance_summary <- glance(gam_output)
-          tidy_summary <- tidy(gam_output)
-          
-          # Add species column to both summaries
-          glance_summary <- glance_summary |> 
-            mutate(species = i)
-          
-          tidy_summary <- tidy_summary |> 
-            mutate(species = i)
-          
-          # combine both
-          total_summary <- merge(tidy_summary, glance_summary)
-          
-          # Store the summary in the list
-          summ <- summary(gam_output)
-          
-          dev_explained <- summ$dev.expl
-          total_summary$deviance_explained <- dev_explained
-          
-          chi_sq <- summ[["chi.sq"]][["s(mean_last_7days)"]]
-          
-          total_summary$chi_square <- chi_sq
-          
-          p_value <- summ[["s.pv"]][1]
-          total_summary$p_value <- p_value
-          
-          edf <- summ[["edf"]][1]
-          total_summary$edf <- edf
-          
-          r_sq <- summ[["r.sq"]]
-          total_summary$r_sq <- r_sq
-          
-          model_summary[[i]] <- total_summary
+          # # stats
+          # glance_summary <- glance(gam_output)
+          # tidy_summary <- tidy(gam_output)
+          # 
+          # # Add species column to both summaries
+          # glance_summary <- glance_summary |> 
+          #   mutate(species = i)
+          # 
+          # tidy_summary <- tidy_summary |> 
+          #   mutate(species = i)
+          # 
+          # # combine both
+          # total_summary <- merge(tidy_summary, glance_summary)
+          # 
+          # # Store the summary in the list
+          # summ <- summary(gam_output)
+          # 
+          # dev_explained <- summ$dev.expl
+          # total_summary$deviance_explained <- dev_explained
+          # 
+          # chi_sq <- summ[["chi.sq"]][["s(mean_last_7days)"]]
+          # 
+          # total_summary$chi_square <- chi_sq
+          # 
+          # p_value <- summ[["s.pv"]][1]
+          # total_summary$p_value <- p_value
+          # 
+          # edf <- summ[["edf"]][1]
+          # total_summary$edf <- edf
+          # 
+          # r_sq <- summ[["r.sq"]]
+          # total_summary$r_sq <- r_sq
+          # 
+          # model_summary[[i]] <- total_summary
         }
         # binomial
         else {
           
           print(paste(data$tot_abu[1], i))
           
-          gam_output <- gam(data = df, Abundance ~ s(mean_last_7days, k = 3) + s(Depth_sample, k = 3)
+          gam_output <- gam(data = data, Abundance ~ s(mean_last_7days, k = 3) + s(Depth_sample, k = 3)
                             + s(fLake, bs = 're')
                             +  s(fProtocol, bs = 're'), family = binomial)
           # prepare residuals
@@ -454,7 +454,7 @@ predictions_depth_temp <- function(df){
           dev.off()
           
           # Plotting standardized residuals against predictors: depth
-          tiff_file_3 <- paste("total_models/gam_check/depth_predictor_depth", i, ".tiff", sep = "")
+          tiff_file_3 <- paste("total_models/gam_check/depth_predictor_", i, ".tiff", sep = "")
           tiff(tiff_file_3, width = 800, height = 600)
           print(plotResiduals(simulationOutput, depth_data$Depth_sample, xlab = "depth", main=NULL))
           dev.off()
@@ -469,40 +469,40 @@ predictions_depth_temp <- function(df){
           
           saveRDS(pred_df, paste0("total_models/predictions/predictions_",i,".rds"))
           
-          # stats
-          glance_summary <- glance(gam_output)
-          tidy_summary <- tidy(gam_output)
-          
-          # Add species column to both summaries
-          glance_summary <- glance_summary |> 
-            mutate(species = i)
-          
-          tidy_summary <- tidy_summary |> 
-            mutate(species = i)
-          
-          # combine both
-          total_summary <- merge(tidy_summary, glance_summary)
-          
-          # Store the summary in the list
-          summ <- summary(gam_output)
-          
-          dev_explained <- summ$dev.expl
-          total_summary$deviance_explained <- dev_explained
-          
-          chi_sq <- summ[["chi.sq"]][["s(mean_last_7days)"]]
-          
-          total_summary$chi_square <- chi_sq
-          
-          p_value <- summ[["s.pv"]][1]
-          total_summary$p_value <- p_value
-          
-          edf <- summ[["edf"]][1]
-          total_summary$edf <- edf
-          
-          r_sq <- summ[["r.sq"]]
-          total_summary$r_sq <- r_sq
-          
-          model_summary[[i]] <- total_summary
+          # # stats
+          # glance_summary <- glance(gam_output)
+          # tidy_summary <- tidy(gam_output)
+          # 
+          # # Add species column to both summaries
+          # glance_summary <- glance_summary |> 
+          #   mutate(species = i)
+          # 
+          # tidy_summary <- tidy_summary |> 
+          #   mutate(species = i)
+          # 
+          # # combine both
+          # total_summary <- merge(tidy_summary, glance_summary)
+          # 
+          # # Store the summary in the list
+          # summ <- summary(gam_output)
+          # 
+          # dev_explained <- summ$dev.expl
+          # total_summary$deviance_explained <- dev_explained
+          # 
+          # chi_sq <- summ[["chi.sq"]][["s(mean_last_7days)"]]
+          # 
+          # total_summary$chi_square <- chi_sq
+          # 
+          # p_value <- summ[["s.pv"]][1]
+          # total_summary$p_value <- p_value
+          # 
+          # edf <- summ[["edf"]][1]
+          # total_summary$edf <- edf
+          # 
+          # r_sq <- summ[["r.sq"]]
+          # total_summary$r_sq <- r_sq
+          # 
+          # model_summary[[i]] <- total_summary
         }
         
       }
@@ -550,40 +550,40 @@ predictions_depth_temp <- function(df){
           # saving the predictions
           saveRDS(pred_df, paste0("total_models/predictions/predictions_",i,".rds"))
           
-          # stats
-          glance_summary <- glance(gam_output)
-          tidy_summary <- tidy(gam_output)
-          
-          # Add species column to both summaries
-          glance_summary <- glance_summary |> 
-            mutate(species = i)
-          
-          tidy_summary <- tidy_summary |> 
-            mutate(species = i)
-          
-          # combine both
-          total_summary <- merge(tidy_summary, glance_summary)
-          
-          # Store the summary in the list
-          summ <- summary(gam_output)
-          
-          dev_explained <- summ$dev.expl
-          total_summary$deviance_explained <- dev_explained
-          
-          chi_sq <- summ[["chi.sq"]][["s(mean_last_7days)"]]
-          
-          total_summary$chi_square <- chi_sq
-          
-          p_value <- summ[["s.pv"]][1]
-          total_summary$p_value <- p_value
-          
-          edf <- summ[["edf"]][1]
-          total_summary$edf <- edf
-          
-          r_sq <- summ[["r.sq"]]
-          total_summary$r_sq <- r_sq
-          
-          model_summary[[i]] <- total_summary
+          # # stats
+          # glance_summary <- glance(gam_output)
+          # tidy_summary <- tidy(gam_output)
+          # 
+          # # Add species column to both summaries
+          # glance_summary <- glance_summary |> 
+          #   mutate(species = i)
+          # 
+          # tidy_summary <- tidy_summary |> 
+          #   mutate(species = i)
+          # 
+          # # combine both
+          # total_summary <- merge(tidy_summary, glance_summary)
+          # 
+          # # Store the summary in the list
+          # summ <- summary(gam_output)
+          # 
+          # dev_explained <- summ$dev.expl
+          # total_summary$deviance_explained <- dev_explained
+          # 
+          # chi_sq <- summ[["chi.sq"]][["s(mean_last_7days)"]]
+          # 
+          # total_summary$chi_square <- chi_sq
+          # 
+          # p_value <- summ[["s.pv"]][1]
+          # total_summary$p_value <- p_value
+          # 
+          # edf <- summ[["edf"]][1]
+          # total_summary$edf <- edf
+          # 
+          # r_sq <- summ[["r.sq"]]
+          # total_summary$r_sq <- r_sq
+          # 
+          # model_summary[[i]] <- total_summary
           
         }
         # abundance
@@ -605,7 +605,6 @@ predictions_depth_temp <- function(df){
           print(plotResiduals(simulationOutput, temp_data$mean_last_7days, xlab = "temp", main=NULL))
           dev.off()
           
-          # print(glance(gam_output[[i]]))
           
           model_prediction <- predict.gam(gam_output, newdata = grid,
                                           exclude= "s(fProtocol)",
@@ -618,40 +617,40 @@ predictions_depth_temp <- function(df){
           
           saveRDS(pred_df, paste0("total_models/predictions/predictions_",i,".rds"))
           
-          # stats
-          glance_summary <- glance(gam_output)
-          tidy_summary <- tidy(gam_output)
-          
-          # Add species column to both summaries
-          glance_summary <- glance_summary |> 
-            mutate(species = i)
-          
-          tidy_summary <- tidy_summary |> 
-            mutate(species = i)
-          
-          # combine both
-          total_summary <- merge(tidy_summary, glance_summary)
-          
-          # Store the summary in the list
-          summ <- summary(gam_output)
-          
-          dev_explained <- summ$dev.expl
-          total_summary$deviance_explained <- dev_explained
-          
-          chi_sq <- summ[["chi.sq"]][["s(mean_last_7days)"]]
-          
-          total_summary$chi_square <- chi_sq
-          
-          p_value <- summ[["s.pv"]][1]
-          total_summary$p_value <- p_value
-          
-          edf <- summ[["edf"]][1]
-          total_summary$edf <- edf
-          
-          r_sq <- summ[["r.sq"]]
-          total_summary$r_sq <- r_sq
-          
-          model_summary[[i]] <- total_summary
+          # # stats
+          # glance_summary <- glance(gam_output)
+          # tidy_summary <- tidy(gam_output)
+          # 
+          # # Add species column to both summaries
+          # glance_summary <- glance_summary |> 
+          #   mutate(species = i)
+          # 
+          # tidy_summary <- tidy_summary |> 
+          #   mutate(species = i)
+          # 
+          # # combine both
+          # total_summary <- merge(tidy_summary, glance_summary)
+          # 
+          # # Store the summary in the list
+          # summ <- summary(gam_output)
+          # 
+          # dev_explained <- summ$dev.expl
+          # total_summary$deviance_explained <- dev_explained
+          # 
+          # chi_sq <- summ[["chi.sq"]][["s(mean_last_7days)"]]
+          # 
+          # total_summary$chi_square <- chi_sq
+          # 
+          # p_value <- summ[["s.pv"]][1]
+          # total_summary$p_value <- p_value
+          # 
+          # edf <- summ[["edf"]][1]
+          # total_summary$edf <- edf
+          # 
+          # r_sq <- summ[["r.sq"]]
+          # total_summary$r_sq <- r_sq
+          # 
+          # model_summary[[i]] <- total_summary
           
         }
         # binomial
@@ -673,8 +672,6 @@ predictions_depth_temp <- function(df){
           print(plotResiduals(simulationOutput, temp_data$mean_last_7days, xlab = "temp", main=NULL))
           dev.off()
           
-          print(glance(gam_output))
-          
           
           model_prediction <- predict.gam(gam_output, newdata = grid,
                                           exclude = "s(fProtocol)",
@@ -686,41 +683,41 @@ predictions_depth_temp <- function(df){
             mutate(species = factor(i))
           saveRDS(pred_df, paste0("total_models/predictions/predictions_",i,".rds"))
           
-          # stats
-          glance_summary <- glance(gam_output)
-          tidy_summary <- tidy(gam_output)
-          
-          # Add species column to both summaries
-          glance_summary <- glance_summary |> 
-            mutate(species = i)
-          
-          tidy_summary <- tidy_summary |> 
-            mutate(species = i)
-          
-          # combine both
-          total_summary <- merge(tidy_summary, glance_summary)
-          
-          # Store the summary in the list
-          summ <- summary(gam_output)
-          
-          dev_explained <- summ$dev.expl
-          total_summary$deviance_explained <- dev_explained
-          
-          chi_sq <- summ[["chi.sq"]][["s(mean_last_7days)"]]
-          
-          total_summary$chi_square <- chi_sq
-          
-          p_value <- summ[["s.pv"]][1]
-          total_summary$p_value <- p_value
-          
-          edf <- summ[["edf"]][1]
-          total_summary$edf <- edf
-          
-          r_sq <- summ[["r.sq"]]
-          total_summary$r_sq <- r_sq
-          
-          model_summary[[i]] <- total_summary
-          
+          # # stats
+          # glance_summary <- glance(gam_output)
+          # tidy_summary <- tidy(gam_output)
+          # 
+          # # Add species column to both summaries
+          # glance_summary <- glance_summary |> 
+          #   mutate(species = i)
+          # 
+          # tidy_summary <- tidy_summary |> 
+          #   mutate(species = i)
+          # 
+          # # combine both
+          # total_summary <- merge(tidy_summary, glance_summary)
+          # 
+          # # Store the summary in the list
+          # summ <- summary(gam_output)
+          # 
+          # dev_explained <- summ$dev.expl
+          # total_summary$deviance_explained <- dev_explained
+          # 
+          # chi_sq <- summ[["chi.sq"]][["s(mean_last_7days)"]]
+          # 
+          # total_summary$chi_square <- chi_sq
+          # 
+          # p_value <- summ[["s.pv"]][1]
+          # total_summary$p_value <- p_value
+          # 
+          # edf <- summ[["edf"]][1]
+          # total_summary$edf <- edf
+          # 
+          # r_sq <- summ[["r.sq"]]
+          # total_summary$r_sq <- r_sq
+          # 
+          # model_summary[[i]] <- total_summary
+          # 
         }
       }
       # multiple lakes
@@ -759,7 +756,6 @@ predictions_depth_temp <- function(df){
           print(plotResiduals(simulationOutput, temp_data$mean_last_7days, xlab = "temp", main=NULL))
           dev.off()
           
-          print(glance(gam_output))
           
           model_prediction <- predict.gam(gam_output, newdata = grid,
                                           exclude = c("s(fProtocol)", "s(fLake)"),
@@ -771,40 +767,40 @@ predictions_depth_temp <- function(df){
           
           saveRDS(pred_df, paste0("total_models/predictions/predictions_",i,".rds"))
           
-          # stats
-          glance_summary <- glance(gam_output)
-          tidy_summary <- tidy(gam_output)
-          
-          # Add species column to both summaries
-          glance_summary <- glance_summary |> 
-            mutate(species = i)
-          
-          tidy_summary <- tidy_summary |> 
-            mutate(species = i)
-          
-          # combine both
-          total_summary <- merge(tidy_summary, glance_summary)
-          
-          # Store the summary in the list
-          summ <- summary(gam_output)
-          
-          dev_explained <- summ$dev.expl
-          total_summary$deviance_explained <- dev_explained
-          
-          chi_sq <- summ[["chi.sq"]][["s(mean_last_7days)"]]
-          
-          total_summary$chi_square <- chi_sq
-          
-          p_value <- summ[["s.pv"]][1]
-          total_summary$p_value <- p_value
-          
-          edf <- summ[["edf"]][1]
-          total_summary$edf <- edf
-          
-          r_sq <- summ[["r.sq"]]
-          total_summary$r_sq <- r_sq
-          
-          model_summary[[i]] <- total_summary
+          # # stats
+          # glance_summary <- glance(gam_output)
+          # tidy_summary <- tidy(gam_output)
+          # 
+          # # Add species column to both summaries
+          # glance_summary <- glance_summary |> 
+          #   mutate(species = i)
+          # 
+          # tidy_summary <- tidy_summary |> 
+          #   mutate(species = i)
+          # 
+          # # combine both
+          # total_summary <- merge(tidy_summary, glance_summary)
+          # 
+          # # Store the summary in the list
+          # summ <- summary(gam_output)
+          # 
+          # dev_explained <- summ$dev.expl
+          # total_summary$deviance_explained <- dev_explained
+          # 
+          # chi_sq <- summ[["chi.sq"]][["s(mean_last_7days)"]]
+          # 
+          # total_summary$chi_square <- chi_sq
+          # 
+          # p_value <- summ[["s.pv"]][1]
+          # total_summary$p_value <- p_value
+          # 
+          # edf <- summ[["edf"]][1]
+          # total_summary$edf <- edf
+          # 
+          # r_sq <- summ[["r.sq"]]
+          # total_summary$r_sq <- r_sq
+          # 
+          # model_summary[[i]] <- total_summary
         }
         # abundance
         else if (max(data$Abundance) > 1)  {
@@ -825,7 +821,6 @@ predictions_depth_temp <- function(df){
           print(plotResiduals(simulationOutput, temp_data$mean_last_7days, xlab = "temp", main=NULL))
           dev.off()
           
-          print(glance(gam_output))
           
           model_prediction <- predict.gam(gam_output, newdata = grid,
                                           exclude = c("s(fProtocol)", "s(fLake)"),
@@ -834,43 +829,44 @@ predictions_depth_temp <- function(df){
           pred_df <- model_bind |>
             rename(temp = mean_last_7days) |>
             mutate(species = factor(i))
+          
           saveRDS(pred_df, paste0("total_models/predictions/predictions_",i,".rds"))
           
-          # stats
-          glance_summary <- glance(gam_output)
-          tidy_summary <- tidy(gam_output)
-          
-          # Add species column to both summaries
-          glance_summary <- glance_summary |> 
-            mutate(species = i)
-          
-          tidy_summary <- tidy_summary |> 
-            mutate(species = i)
-          
-          # combine both
-          total_summary <- merge(tidy_summary, glance_summary)
-          
-          # Store the summary in the list
-          summ <- summary(gam_output)
-          
-          dev_explained <- summ$dev.expl
-          total_summary$deviance_explained <- dev_explained
-          
-          chi_sq <- summ[["chi.sq"]][["s(mean_last_7days)"]]
-          
-          total_summary$chi_square <- chi_sq
-          
-          p_value <- summ[["s.pv"]][1]
-          total_summary$p_value <- p_value
-          
-          edf <- summ[["edf"]][1]
-          total_summary$edf <- edf
-          
-          r_sq <- summ[["r.sq"]]
-          total_summary$r_sq <- r_sq
-          
-          model_summary[[i]] <- total_summary
-          
+          # # stats
+          # glance_summary <- glance(gam_output)
+          # tidy_summary <- tidy(gam_output)
+          # 
+          # # Add species column to both summaries
+          # glance_summary <- glance_summary |> 
+          #   mutate(species = i)
+          # 
+          # tidy_summary <- tidy_summary |> 
+          #   mutate(species = i)
+          # 
+          # # combine both
+          # total_summary <- merge(tidy_summary, glance_summary)
+          # 
+          # # Store the summary in the list
+          # summ <- summary(gam_output)
+          # 
+          # dev_explained <- summ$dev.expl
+          # total_summary$deviance_explained <- dev_explained
+          # 
+          # chi_sq <- summ[["chi.sq"]][["s(mean_last_7days)"]]
+          # 
+          # total_summary$chi_square <- chi_sq
+          # 
+          # p_value <- summ[["s.pv"]][1]
+          # total_summary$p_value <- p_value
+          # 
+          # edf <- summ[["edf"]][1]
+          # total_summary$edf <- edf
+          # 
+          # r_sq <- summ[["r.sq"]]
+          # total_summary$r_sq <- r_sq
+          # 
+          # model_summary[[i]] <- total_summary
+          # 
         }
         # binomial
         else {
@@ -891,8 +887,7 @@ predictions_depth_temp <- function(df){
           tiff(tiff_file_2, width = 800, height = 600)
           print(plotResiduals(simulationOutput, temp_data$mean_last_7days, xlab = "temp", main=NULL))
           dev.off()
-          
-          print(glance(gam_output))
+        
           
           model_prediction <- predict.gam(gam_output, newdata = grid,
                                           exclude = c("s(fProtocol)", "s(fLake)"),
@@ -903,40 +898,40 @@ predictions_depth_temp <- function(df){
             mutate(species = factor(i))
           saveRDS(pred_df, paste0("total_models/predictions/predictions_",i,".rds"))
           
-          # stats
-          glance_summary <- glance(gam_output)
-          tidy_summary <- tidy(gam_output)
-          
-          # Add species column to both summaries
-          glance_summary <- glance_summary |> 
-            mutate(species = i)
-          
-          tidy_summary <- tidy_summary |> 
-            mutate(species = i)
-          
-          # combine both
-          total_summary <- merge(tidy_summary, glance_summary)
-          
-          # Store the summary in the list
-          summ <- summary(gam_output)
-          
-          dev_explained <- summ$dev.expl
-          total_summary$deviance_explained <- dev_explained
-          
-          chi_sq <- summ[["chi.sq"]][["s(mean_last_7days)"]]
-          
-          total_summary$chi_square <- chi_sq
-          
-          p_value <- summ[["s.pv"]][1]
-          total_summary$p_value <- p_value
-          
-          edf <- summ[["edf"]][1]
-          total_summary$edf <- edf
-          
-          r_sq <- summ[["r.sq"]]
-          total_summary$r_sq <- r_sq
-          
-          model_summary[[i]] <- total_summary
+          # # stats
+          # glance_summary <- glance(gam_output)
+          # tidy_summary <- tidy(gam_output)
+          # 
+          # # Add species column to both summaries
+          # glance_summary <- glance_summary |> 
+          #   mutate(species = i)
+          # 
+          # tidy_summary <- tidy_summary |> 
+          #   mutate(species = i)
+          # 
+          # # combine both
+          # total_summary <- merge(tidy_summary, glance_summary)
+          # 
+          # # Store the summary in the list
+          # summ <- summary(gam_output)
+          # 
+          # dev_explained <- summ$dev.expl
+          # total_summary$deviance_explained <- dev_explained
+          # 
+          # chi_sq <- summ[["chi.sq"]][["s(mean_last_7days)"]]
+          # 
+          # total_summary$chi_square <- chi_sq
+          # 
+          # p_value <- summ[["s.pv"]][1]
+          # total_summary$p_value <- p_value
+          # 
+          # edf <- summ[["edf"]][1]
+          # total_summary$edf <- edf
+          # 
+          # r_sq <- summ[["r.sq"]]
+          # total_summary$r_sq <- r_sq
+          # 
+          # model_summary[[i]] <- total_summary
           
         }
         
@@ -946,12 +941,12 @@ predictions_depth_temp <- function(df){
     
     
   }
-  # Combine all summaries into a single data frame
-  summary_df <- bind_rows(model_summary)
-  
-  
-  # # Export the summary data frame to a text file
-  write_xlsx(summary_df, path = "summary_statistics.xlsx")   
+  # # Combine all summaries into a single data frame
+  # summary_df <- bind_rows(model_summary)
+  # 
+  # 
+  # # # Export the summary data frame to a text file
+  # write_xlsx(summary_df, path = "summary_statistics.xlsx")   
   
 }
 
@@ -1018,8 +1013,15 @@ stats_gamms <- function(df){
           tidy_summary <- tidy_summary |> 
             mutate(species = i)
           
+          # abundance column
+          abundances <- data |> 
+            rename(species = Species) |> 
+            distinct(species, tot_abu)
+          
           # combine both
-          total_summary <- merge(tidy_summary, glance_summary)
+          pre_total_summary <- merge(tidy_summary, glance_summary)
+          
+          total_summary <- merge(pre_total_summary, abundances)
           
           # Store the summary in the list
           summ <- summary(gam_output)
@@ -1061,8 +1063,16 @@ stats_gamms <- function(df){
           tidy_summary <- tidy_summary |> 
             mutate(species = i)
           
+          # abundance column
+          abundances <- data |> 
+            rename(species = Species) |> 
+            distinct(species, tot_abu)
+          
           # combine both
-          total_summary <- merge(tidy_summary, glance_summary)
+          pre_total_summary <- merge(tidy_summary, glance_summary)
+          
+          total_summary <- merge(pre_total_summary, abundances)
+    
           
           # Store the summary in the list
           summ <- summary(gam_output)
@@ -1103,8 +1113,15 @@ stats_gamms <- function(df){
           tidy_summary <- tidy_summary |> 
             mutate(species = i)
           
+          # abundance column
+          abundances <- data |> 
+            rename(species = Species) |> 
+            distinct(species, tot_abu)
+          
           # combine both
-          total_summary <- merge(tidy_summary, glance_summary)
+          pre_total_summary <- merge(tidy_summary, glance_summary)
+          
+          total_summary <- merge(pre_total_summary, abundances)
           
           # Store the summary in the list
           summ <- summary(gam_output)
@@ -1154,8 +1171,15 @@ stats_gamms <- function(df){
           tidy_summary <- tidy_summary |> 
             mutate(species = i)
           
+          # abundance column
+          abundances <- data |> 
+            rename(species = Species) |> 
+            distinct(species, tot_abu)
+          
           # combine both
-          total_summary <- merge(tidy_summary, glance_summary)
+          pre_total_summary <- merge(tidy_summary, glance_summary)
+          
+          total_summary <- merge(pre_total_summary, abundances)
           
           # Store the summary in the list
           summ <- summary(gam_output)
@@ -1198,8 +1222,15 @@ stats_gamms <- function(df){
           tidy_summary <- tidy_summary |> 
             mutate(species = i)
           
+          # abundance column
+          abundances <- data |> 
+            rename(species = Species) |> 
+            distinct(species, tot_abu)
+          
           # combine both
-          total_summary <- merge(tidy_summary, glance_summary)
+          pre_total_summary <- merge(tidy_summary, glance_summary)
+          
+          total_summary <- merge(pre_total_summary, abundances)
           
           # Store the summary in the list
           summ <- summary(gam_output)
@@ -1242,8 +1273,15 @@ stats_gamms <- function(df){
           tidy_summary <- tidy_summary |> 
             mutate(species = i)
           
+          # abundance column
+          abundances <- data |> 
+            rename(species = Species) |> 
+            distinct(species, tot_abu)
+          
           # combine both
-          total_summary <- merge(tidy_summary, glance_summary)
+          pre_total_summary <- merge(tidy_summary, glance_summary)
+          
+          total_summary <- merge(pre_total_summary, abundances)
           
           # Store the summary in the list
           summ <- summary(gam_output)
@@ -1295,8 +1333,15 @@ stats_gamms <- function(df){
           tidy_summary <- tidy_summary |> 
             mutate(species = i)
           
+          # abundance column
+          abundances <- data |> 
+            rename(species = Species) |> 
+            distinct(species, tot_abu)
+          
           # combine both
-          total_summary <- merge(tidy_summary, glance_summary)
+          pre_total_summary <- merge(tidy_summary, glance_summary)
+          
+          total_summary <- merge(pre_total_summary, abundances)
           
           # Store the summary in the list
           summ <- summary(gam_output)
@@ -1338,8 +1383,15 @@ stats_gamms <- function(df){
           tidy_summary <- tidy_summary |> 
             mutate(species = i)
           
+          # abundance column
+          abundances <- data |> 
+            rename(species = Species) |> 
+            distinct(species, tot_abu)
+          
           # combine both
-          total_summary <- merge(tidy_summary, glance_summary)
+          pre_total_summary <- merge(tidy_summary, glance_summary)
+          
+          total_summary <- merge(pre_total_summary, abundances)
           
           # Store the summary in the list
           summ <- summary(gam_output)
@@ -1381,8 +1433,15 @@ stats_gamms <- function(df){
           tidy_summary <- tidy_summary |> 
             mutate(species = i)
           
+          # abundance column
+          abundances <- data |> 
+            rename(species = Species) |> 
+            distinct(species, tot_abu)
+          
           # combine both
-          total_summary <- merge(tidy_summary, glance_summary)
+          pre_total_summary <- merge(tidy_summary, glance_summary)
+          
+          total_summary <- merge(pre_total_summary, abundances)
           
           # Store the summary in the list
           summ <- summary(gam_output)
@@ -1432,8 +1491,15 @@ stats_gamms <- function(df){
           tidy_summary <- tidy_summary |> 
             mutate(species = i)
           
+          # abundance column
+          abundances <- data |> 
+            rename(species = Species) |> 
+            distinct(species, tot_abu)
+          
           # combine both
-          total_summary <- merge(tidy_summary, glance_summary)
+          pre_total_summary <- merge(tidy_summary, glance_summary)
+          
+          total_summary <- merge(pre_total_summary, abundances)
           
           # Store the summary in the list
           summ <- summary(gam_output)
@@ -1474,8 +1540,15 @@ stats_gamms <- function(df){
           tidy_summary <- tidy_summary |> 
             mutate(species = i)
           
+          # abundance column
+          abundances <- data |> 
+            rename(species = Species) |> 
+            distinct(species, tot_abu)
+          
           # combine both
-          total_summary <- merge(tidy_summary, glance_summary)
+          pre_total_summary <- merge(tidy_summary, glance_summary)
+          
+          total_summary <- merge(pre_total_summary, abundances)
           
           # Store the summary in the list
           summ <- summary(gam_output)
@@ -1517,8 +1590,15 @@ stats_gamms <- function(df){
           tidy_summary <- tidy_summary |> 
             mutate(species = i)
           
+          # abundance column
+          abundances <- data |> 
+            rename(species = Species) |> 
+            distinct(species, tot_abu)
+          
           # combine both
-          total_summary <- merge(tidy_summary, glance_summary)
+          pre_total_summary <- merge(tidy_summary, glance_summary)
+          
+          total_summary <- merge(pre_total_summary, abundances)
           
           # Store the summary in the list
           summ <- summary(gam_output)
@@ -1551,7 +1631,6 @@ stats_gamms <- function(df){
   }
   # Combine all summaries into a single data frame
   summary_df <- bind_rows(model_summary)
-  
   
   # # Export the summary data frame to a text file
   write_xlsx(summary_df, path = "total_summary_statistics.xlsx")   
