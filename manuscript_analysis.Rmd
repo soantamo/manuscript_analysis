@@ -361,11 +361,21 @@ df_4 <- readRDS("data_frame_models/df_abundance_re")
 #df1 and df2 are the fastest ones
 # predictions() can also be used directly with df_models -> takes longer
 
-predictions_depth_temp(df_1) 
+# DO NOT RUN NOW, RUN LATER!
+predictions_depth_temp(df_1)
+predictions_depth_temp(df_2)
+predictions_depth_temp(df_3)
+# 4 not run yet, will wait with this
+predictions_depth_temp(df_4)
 
-# predictions(df_2)
-# predictions(df_3)
-# predictions(df_4)
+
+# statistics of the gamms
+total_models <- bind_rows(df_1, df_2, df_3, df_4)
+
+# total_models |> 
+#   filter(tot_abu > 20) |> 
+#   distinct(Species, tot_abu)
+stats_gamms(total_models)
 
 #  compile data frame with all predictions from the saved species' model predictions
 
@@ -388,10 +398,71 @@ model_predictions <- readRDS("total_models/df_pred_all.rds")
 model_predictions$species <- as.factor(model_predictions$species)
 levels(model_predictions$species)
 
-# Plot Figure 2. 
-all_predictions <- model_predictions |>
-  # exclude Lepomis gibbosus
-  filter(species != "Lepomis_gibbosus") |> #lepomis gibbosus was excluded upon examination
+# read in the category table and rename categories
+species_across_lakes <-  read_xlsx("species_category_across_lakes.xlsx") |> 
+  select(-notes) |> 
+    mutate(category = ifelse(category == "native", "non_endemic_native", category)) |>
+  mutate(category = ifelse(category == "non_native_region", "non_endemic_native_and_translocated", category)) |> 
+  mutate(category2 = factor("all"))
+
+species_across_lakes$category <- as.factor(species_across_lakes$category)
+levels(species_across_lakes$category)
+
+#merge predictions with categories
+predictions_categories <- merge(model_predictions, species_across_lakes)
+
+# EVTL NEW PLOT 2
+# change category names for facet_wrap
+category_names <- c(
+  `endemic` = "endemic",
+  `endemic_and_translocated` = "translocated endemic",
+  `non_endemic_native` = "non-endemic native",
+  `non_endemic_native_and_translocated` = "translocated non-endemic native",
+  `non_native` = "non-native"
+)
+
+# colors for the plot
+mycolors1 <-  c("endemic"= "#63D8F2", "non_endemic_native"="#F26379", "non_native" = "#5A64D8",
+                "endemic_and_translocated" = "#F2AD63", "non_endemic_native_and_translocated" = "#F2AD63")
+
+# Rescale the predictions to 0-1 
+predictions_categories_rescaled <- predictions_categories |>
+  group_by(species) |>
+  mutate(fit_rescaled = (fit - min(fit)) / (max(fit) - min(fit)))
+
+plot_pred <- predictions_categories_rescaled |>
+  ggplot(aes(temp, fit_rescaled, group = species, color = category)) +
+  geom_line() +
+  # how can I get the right color?
+   # geom_ribbon(aes(ymin = (fit - se.fit), ymax = (fit + se.fit)), alpha = 0.3) +
+  theme_bw(base_size = 16) +
+  ylab("Abundance") +
+  xlab("Temperature") +
+  scale_color_manual(values = mycolors1, guide = NULL) +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        legend.position = "bottom",
+        legend.title = element_blank()) 
+
+plot_category_predictions <- plot_pred + facet_grid(~category, labeller = as_labeller(category_names))
+
+plot_category_predictions
+
+# trying to group by category and color
+predictions_categories |>
+  ggplot(aes(temp, fit)) +
+  geom_ribbon(aes(ymin = (fit - se.fit), ymax = (fit + se.fit), fill = factor(category)), alpha = 0.3) +
+  geom_line(aes(color = factor(category))) +
+  theme_bw() +
+  facet_wrap(~species + category, scale = "free_y", labeller = labeller(species = label_wrap_gen(width = 10))) +
+  theme(strip.background = element_rect(fill = "lightgrey"), strip.text = element_text(size = 6)) +
+  scale_color_manual(values = mycolors1, aesthetics = c("color", "fill")) +
+  xlab("Temperature") +
+  ylab("Abundance")
+
+# OLD FIGURE 2
+
+all_predictions <- predictions_categories |>
   ggplot(aes(temp, fit)) +
   geom_ribbon(aes(ymin = (fit - se.fit), ymax = (fit + se.fit), fill = factor(species)), alpha = 0.3) +
   geom_line(aes(color = factor(species))) +
@@ -402,9 +473,7 @@ all_predictions <- model_predictions |>
   xlab("Temperature") +
   ylab("Abundance")
 
-
 all_predictions
-
 # save the plot as TIFF
 # tiff(paste("total_models/plots/all_predictions_models.tiff", sep = ""), units="in", width = 12, height=8, res=300)
 # plot(all_predictions)
@@ -415,6 +484,7 @@ all_predictions
 ```
 
 ##Sensitivity testing
+NOT CHANGED 
 Testing if depth-driven temperature models can adequately fit abundance data compared to
 a temperature and depth model. 
 Models were compared in the eleven most abundant species. 
@@ -653,6 +723,401 @@ df_binomial_re$fProtocol <- as.factor(df_binomial_re$Protocol)
 df_abundance_re <- readRDS("data_frame_models/df_abundance_re")
 df_abundance_re$fLake <- as.factor(df_abundance_re$Lake)
 df_abundance_re$fProtocol <- as.factor(df_abundance_re$Protocol)
+
+# separating the dfs to separate model types
+depth_binomial_gam <- df_binomial_gam |> 
+  filter(tot_abu > 20)
+
+temp_binomial_gam <- df_binomial_gam |> 
+  filter(tot_abu < 20)
+
+depth_abundance_gam <- df_abundance_gam |> 
+  filter(tot_abu > 20)
+
+temp_abundance_gam <- df_abundance_gam |> 
+  filter(tot_abu < 20)
+
+depth_binomial_re <- df_binomial_re |> 
+  filter(tot_abu > 20)
+
+temp_binomial_re <- df_binomial_re |> 
+  filter(tot_abu < 20)
+
+depth_abundance_re <- df_abundance_re |> 
+  filter(tot_abu > 20)
+
+temp_abundance_re <- df_abundance_re |> 
+  filter(tot_abu < 20)
+
+```
+
+###Depth and temp models
+```{r}
+# DEPTH AND TEMPERATURE
+# UNCLEAR HOW THIS CAN BE DONE
+# Model 1: Binomial data without random intercepts
+
+species_list <- depth_binomial_gam |>
+  distinct(Species) |>
+  pull(Species)
+
+species_list <- sort(species_list)
+
+derivatives <- list()
+gam_output <- list()
+model_prediction <- list()
+
+i <- "Salmo_sp_Blackspot"
+j <- "Poschiavo"
+# loop through the list of species
+for (i in species_list) {
+  data <- depth_binomial_gam |>
+    filter(Species == i)
+
+  lake_data <- species_lake |>
+    filter(Species == i)
+
+  gam_output[[i]] <- gam(data = data, Abundance ~ s(mean_last_7days, k = 3) +
+                           s(Depth_sample, k = 3) + s(fProtocol, bs = 're'),
+                         family = binomial)
+
+  lake_list <- distinct(lake_data, Lake) |>
+    pull()
+
+  # loop through all lakes where the species is present, lake list is based on the information from
+  # Projet Lac
+  for (j in lake_list){
+
+    data_lake <- species_lake |>
+      filter(Species == i) |>
+      filter(Lake == j)
+    
+    # using minimum and maximum temp in the lake for derivatives
+     newdata <- tibble(mean_last_7days = seq(from = min(data_lake$temp, na.rm = TRUE),
+                                             to = max(data_lake$temp, na.rm = TRUE)
+                                             ,length = 200), Depth_sample =
+                         mean(data$Depth_sample, na.rm = TRUE),
+                       fProtocol = factor("VERT"))
+     
+     # calculate derivatives
+     # derivatives <- derivatives(gam_output[[i]], data = newdata) |>
+     #   mutate(fLake = factor(j)) |>
+     #   mutate(species = factor(i))
+     #   rename(temp = data)
+     #  
+
+       
+       test_derivatives <- derivative_samples(gam_output[[i]]
+                                              , focal = "mean_last_7days", data = newdata)
+       
+       test_derivatives |>
+         filter(.draw <= 200) |>
+         ggplot(aes(x = mean_last_7days, y = .derivative, group = .draw)) +
+         geom_line(alpha = 0.5)
+       
+       derivatives <- test_derivatives |> 
+         filter(.draw == 500) |> 
+         mutate(fLake = factor(j)) |>
+         mutate(species = factor(i))
+       
+       derivatives |> 
+         ggplot(aes(mean_last_7days, .derivative)) +
+         geom_line()
+         
+     
+     saveRDS(derivatives, paste0("total_models/derivatives/derivatives_", i, "_",  j, ".rds"))
+  }
+}
+
+# needs to be discussed
+
+# nothing changed starting from here
+############################################################################3##3
+# Model 2.1: Abundance data and no random intercept for lake -> but binomial
+# Coregonus_sp_benthic_profundal did not run with ZIP and was thus
+# run with binomial. 
+
+species_list <- depth_abundance_gam |> 
+  # binomial one
+  filter(Species == "Coregonus_sp_benthic_profundal") |>
+  distinct(Species) |> 
+  pull(Species)
+
+species_list <- sort(species_list)
+
+derivatives <- list()
+gam_output <- list()
+model_prediction <- list()
+
+for (i in species_list) {
+  
+  data <- df_abundance_gam |> 
+    filter(Species == i)
+  
+  # binomial family instead of ZIP
+  gam_output[[i]] <- gam(data = data, Presence ~ s(mean_last_7days, k = 3) +
+                           s(fProtocol, bs = 're'), family = binomial())
+  
+  lake_data <- species_lake |>
+    filter(Species == i)
+  
+  lake_list <- distinct(lake_data, Lake) |>
+    pull()
+  
+  for (j in lake_list){
+    
+    data_lake <- species_lake |>
+      filter(Species == i) |>
+      filter(Lake == j)
+    
+    newdata <- tibble(mean_last_7days = seq(
+      from = min(data_lake$temp, na.rm = TRUE),
+      to = max(data_lake$temp, na.rm = TRUE), length = 200),
+      fProtocol = factor("VERT"))
+
+    derivatives <- derivatives(gam_output[[i]], data = newdata) |>
+      mutate(fLake = factor(j)) |>
+      mutate(species = factor(i)) |>
+      rename(temp = data)
+    
+    saveRDS(derivatives, paste0("total_models/derivatives/derivatives_", i, "_",  j, ".rds"))
+  }
+}
+
+
+# Model 2.2: Abundance data and no random intercept for lake -> ZIP
+# all other species in this group run with ZIP
+
+species_list <- df_abundance_gam |>
+  filter(!Species == "Coregonus_sp_benthic_profundal") |>
+  distinct(Species) |> 
+  pull(Species)
+
+species_list <- sort(species_list)
+
+derivatives <- list()
+gam_output <- list()
+model_prediction <- list()
+
+
+for (i in species_list) {
+  
+  data <- df_abundance_gam |> 
+    filter(Species == i)
+  
+  gam_output[[i]] <- gam(data = data, Abundance ~ s(mean_last_7days, k = 3) + s(fProtocol, bs = 're'),
+                         family = ziP())
+  
+  lake_data <- species_lake |>
+    filter(Species == i)
+  
+  lake_list <- distinct(lake_data, Lake) |>
+    pull()
+  
+  for (j in lake_list){
+    
+    data_lake <- species_lake |>
+      filter(Species == i) |>
+      filter(Lake == j)
+    
+    newdata <- tibble(mean_last_7days = seq(
+      from = min(data_lake$temp, na.rm = TRUE),
+      to = max(data_lake$temp, na.rm = TRUE), length = 200),
+      fProtocol = factor("VERT"))
+    
+    derivatives <- derivatives(gam_output[[i]], data = newdata) |>
+      mutate(fLake = factor(j)) |>
+      mutate(species = factor(i)) |>
+      rename(temp = data)
+    
+    saveRDS(derivatives, paste0("total_models/derivatives/derivatives_", i, "_",  j, ".rds"))
+  }
+}
+
+# Model 3: Binomial data and random intercept for lake 
+
+species_list <- df_binomial_re |> 
+  distinct(Species) |> 
+  pull(Species)
+
+species_list <- sort(species_list)
+
+derivatives <- list()
+gam_output <- list()
+model_prediction <- list()
+
+for (i in species_list) {
+  
+  data <- df_binomial_re |> 
+    filter(Species == i)
+  
+  gam_output[[i]] <- gam(data = data, Abundance ~ s(mean_last_7days, k = 3) + s(fLake, bs = "re")
+                         + s(fProtocol, bs = 're'), family = binomial)
+  
+  lake_data <- species_lake |>
+    filter(Species == i)
+  
+  lake_list <- distinct(lake_data, Lake) |>
+    pull()
+  
+  unique_lakes <- distinct(data, Lake) |> 
+    pull()
+
+  
+  for (j in lake_list){
+    
+    data_lake <- species_lake |>
+      filter(Species == i) |>
+      filter(Lake == j)
+    
+    # take all lakes where the species is present and take random one for 
+    # the data included in derivatives()
+    random_lake <- sample(unique_lakes, 1)
+  
+    newdata <- tibble(mean_last_7days = seq(
+      from = min(data_lake$temp, na.rm = TRUE),
+      to = max(data_lake$temp, na.rm = TRUE), lenqh = 200),
+      fProtocol = factor("VERT"), fLake = factor(random_lake))
+    
+    derivatives <- derivatives(gam_output[[i]], data = newdata) |>
+      mutate(fLake = factor(j)) |>
+      mutate(species = factor(i)) |>
+      rename(temp = data)
+    
+    saveRDS(derivatives, paste0("total_models/derivatives/derivatives_", i, "_",  j, ".rds"))
+ 
+  }
+}
+
+# Model 4.1: Abundance data and random intercept for lake, simplified models
+# multiple species in this group were simplified and run with binomial
+
+species_list <- df_abundance_re |>
+  # simplified models
+  filter(Species %in% c("Alburnus_arborella", "Barbatula_sp_Lineage_I",
+                                "Cyprinus_carpio", "Phoxinus_csikii", "Salmo_trutta",
+                        "Lepomis_gibbosus")) |>
+  distinct(Species) |>
+  pull(Species)
+
+species_list <- sort(species_list)
+
+
+derivatives <- list()
+gam_output <- list()
+model_prediction <- list()
+
+
+for (i in species_list) {
+
+  data <- df_abundance_re |>
+    filter(Species == i)
+
+  gam_output[[i]] <- gam(data = data, Presence ~ s(mean_last_7days, k = 3) + s(fLake, bs = 're')
+                         +  s(fProtocol, bs = 're'), family = binomial)
+
+  lake_data <- species_lake |>
+    filter(Species == i)
+
+  lake_list <- distinct(lake_data, Lake) |>
+    pull()
+
+  unique_lakes <- distinct(data, Lake) |>
+    pull()
+
+  for (j in lake_list){
+
+    data_lake <- species_lake |>
+      filter(Species == i) |>
+      filter(Lake == j)
+
+    random_lake <- sample(unique_lakes, 1)
+    
+    newdata <- tibble(mean_last_7days = seq(
+      from = min(data_lake$temp, na.rm = TRUE),
+      to = max(data_lake$temp, na.rm = TRUE), length = 200),
+      fLake = factor(random_lake), fProtocol = factor("VERT"))
+    
+    derivatives <- derivatives(gam_output[[i]], data = newdata) |>
+      mutate(fLake = factor(j)) |>
+      mutate(species = factor(i)) |>
+      rename(temp = data)
+    saveRDS(derivatives, paste0("total_models/derivatives/derivatives_", i, "_",  j, ".rds"))
+
+  }
+}
+
+# Model 4.1: Abundance data and random intercept for lake, complex models
+
+species_list <- df_abundance_re |> 
+  # exclusion of simplified models
+  filter(!Species %in% c("Alburnus_arborella", "Barbatula_sp_Lineage_I",
+                        "Cyprinus_carpio", "Phoxinus_csikii", "Salmo_trutta", 
+                        "Lepomis_gibbosus")) |>
+  distinct(Species) |> 
+  pull(Species)
+
+species_list <- sort(species_list)
+
+derivatives <- list()
+gam_output <- list()
+model_prediction <- list()
+
+
+for (i in species_list) {
+  
+  data <- df_abundance_re |> 
+    filter(Species == i)
+  
+  gam_output[[i]] <- gam(data = data, Abundance ~ s(mean_last_7days, k = 3) + s(fLake, bs = 're')
+                         +  s(fProtocol, bs = 're'), family = ziP())
+  
+  lake_data <- species_lake |>
+    filter(Species == i)
+  
+  lake_list <- distinct(lake_data, Lake) |>
+    pull()
+  
+  unique_lakes <- distinct(data, Lake) |> 
+    pull()
+  
+  for (j in lake_list){
+    
+    data_lake <- species_lake |>
+      filter(Species == i) |>
+      filter(Lake == j)
+   
+    random_lake <- sample(unique_lakes, 1)
+
+    newdata <- tibble(mean_last_7days = seq(
+      from = min(data_lake$temp, na.rm = TRUE),
+      to = max(data_lake$temp, na.rm = TRUE), length = 200),
+      fLake = factor(random_lake), fProtocol = factor("VERT"))
+    
+    derivatives <- derivatives(gam_output[[i]], data = newdata) |>
+      mutate(fLake = factor(j)) |>
+      mutate(species = factor(i)) |>
+      rename(temp = data)
+    
+    saveRDS(derivatives, paste0("total_models/derivatives/derivatives_", i, "_",  j, ".rds"))
+
+  }
+}
+
+# save all the derivatives in one file
+
+df_deriv <- list.files(path = "total_models/derivatives", pattern = ".rds", full.names = TRUE) |> 
+  map_dfr(readRDS)
+
+saveRDS(df_deriv, "total_models/df_deriv_all.rds")
+
+# save total derivatives as RDS (no exclusions)
+# saveRDS(df_deriv, "total_models/df_deriv_all_no_excl.rds")
+
+```
+
+###Temp models
+```{r}
 
 # Now four different loops are run to calculate derivatives of each species 
 # in each lake
@@ -1369,7 +1834,10 @@ bind_model2 <- cbind(new_data2, prediction_lm2) |>
   mutate(category ="color")
 
 # Plot Fig. 3
-mycolor <- c("color" = "#A0E66A")
+"#78BE63"
+mycolor <- c("color" = "#78BE63")
+# mycolor <- c("color" = "#A0E66A")
+"98D47C"
 
 lm1_plot <- bind_model1 |> 
   ggplot(aes(sum_species, fit,  color = category, fill = category)) +
@@ -1394,6 +1862,7 @@ lm2_plot <- bind_model2 |>
 # combine both plots
 figure_3 <- ggarrange(lm1_plot, lm2_plot)
 
+figure_3
 # save as TIFF
 # tiff(paste("total_models/plots/lm_species_richness_eutroph.tiff", sep = ""), units="in", width=12, height=5, res=300)
 # 
@@ -1401,6 +1870,90 @@ figure_3 <- ggarrange(lm1_plot, lm2_plot)
 # 
 # # Closing the graphical device
 # dev.off()
+
+```
+
+###Divergence figure 3
+
+```{r}
+# first lm for species richness ~ maximum phosphorus 
+
+lm3 <- lm(mean_sign ~ sum_species + Phos_max, data = df_lm_excl)
+
+# checking model assumptions
+summary(lm3)
+shapiro.test(resid(lm3))
+lmtest::bptest(lm3)
+plot(lm3)
+
+# model assumptions validated
+
+# manually predict data
+new_data3 <- tibble(sum_species = seq(from = min(df_lm_excl$sum_species), to = max(df_lm_excl$sum_species), length = 50), Phos_max = mean(df_lm_excl$Phos_max))
+
+# predict lm
+prediction_lm3 <- predict.lm(lm3, newdata = new_data3, se.fit = TRUE, type = "response")
+
+# combine new data and predictions
+bind_model3 <- cbind(new_data3, prediction_lm3) |> 
+  mutate(category ="color")
+
+
+
+# second lm for maximum phosphorus ~ species richness
+lm4 <- lm(mean_sign ~ Phos_max + sum_species, data = df_lm_excl)
+
+# checking model assumptions
+summary(lm4)
+shapiro.test(resid(lm4))
+lmtest::bptest(lm4)
+plot(lm4)
+
+# new data
+new_data4 <- tibble(Phos_max = seq(from = min(df_lm_excl$Phos_max), to = max(df_lm_excl$Phos_max),length = 50), sum_species = mean(df_lm_excl$sum_species))
+
+# predict model
+prediction_lm4 <- predict.lm(lm4, newdata = new_data4, se.fit = TRUE, type = "response")
+
+# combine new data and predictions
+bind_model4 <- cbind(new_data4, prediction_lm4) |> 
+  mutate(category ="color")
+
+# Plot Fig. 3
+mycolor <- c("color" = "#88D44F")
+# mycolor <- c("color" = "#A0E66A")
+"98D47C"
+
+lm3_plot <- bind_model3 |> 
+  ggplot(aes(sum_species, fit,  color = category, fill = category)) +
+  geom_line(linewidth = 1.2) +
+  geom_ribbon(aes(ymin = (fit - se.fit), ymax = (fit + se.fit)),  alpha = 0.3, color = NA) +
+  theme_classic(base_size = 20) +
+  ylab("Mean divergence") +
+  xlab("Species richness") +
+  scale_fill_manual(values = mycolor, aesthetics = c("color", "fill"), guide = NULL)
+
+lm4_plot <- bind_model4 |> 
+  ggplot(aes(Phos_max, fit, color = category, fill = category)) +
+  geom_line(linewidth = 1.2) +
+  geom_ribbon(aes(ymin = (fit - se.fit), ymax = (fit + se.fit)),  alpha = 0.3, color = NA) +
+  theme_classic(base_size = 20) +
+  ylab("Mean divergence") +
+  xlab("Maximum total phosphorus (µg/L)") +
+  scale_fill_manual(values = mycolor, aesthetics = c("color", "fill"), guide = NULL)
+
+# combine both plots
+figure_divergence <- ggarrange(lm3_plot, lm4_plot)
+
+figure_divergence
+# save as TIFF
+# tiff(paste("total_models/plots/lm_divergence_multiple_linear.tiff", sep = ""), units="in", width=12, height=5, res=300)
+# 
+# plot(figure_divergence)
+# 
+# # Closing the graphical device
+# dev.off()
+
 
 ```
 ###Community subgroups
@@ -1498,18 +2051,21 @@ mycolors <-  c("endemic"= "#63D8F2", "non_endemic_native"="#F26379", "non_native
                "translocated" = "#F2AD63")
 
 
-
 plot_all_lms <- df_all_lms|> 
-  ggplot(aes(species_richness, fit, color = category, fill = category)) +
+  ggplot(aes(species_richness, fit, color = category, fill = category, linetype = category)) +  
   geom_line(linewidth = 1) +
   geom_ribbon(aes(ymin = (fit - se.fit), ymax = (fit + se.fit)), color = NA, alpha = 0.3) +
   theme_classic(base_size = 16) +
   ylab("Mean dissimilarity") +
   xlab("Species richness") +
   scale_fill_manual(values = mycolors,
-                    aesthetics = c("color", "fill"), 
-                    labels = c("endemic", "non-native", "non-endemic native", "translocated"),
-                    name = NULL)
+                    aesthetics = c("color", "fill"),
+                    labels = c("endemic", "non-native (ns)", "non-endemic native", "translocated (ns)")) +
+   scale_linetype_manual(values = c("endemic" = "solid",
+                                   "non_native" = "dashed",
+                                   "non_endemic_native" = "solid",
+                                   "translocated" = "dashed"), labels = c("endemic", "non-native (ns)", "non-endemic native", "translocated (ns)"))
+
 plot_all_lms
 # save as TIFF
 # tiff(paste("total_models/plots/lm_all.tiff", sep = ""), units="in", width=11, height=7, res=300)
@@ -1520,6 +2076,123 @@ plot_all_lms
 # dev.off()
 ```
 
+####Divergence Fig. 4a
+
+```{r}
+# Lms for all categories: endemic, translcated, non_native and non_endemic_native
+# with data on all lakes
+# Endemic
+deriv_lm1 <- lm(mean_sign ~ endemic, data = df_lm)
+
+# checking model assumptions
+summary(deriv_lm1)
+shapiro.test(resid(deriv_lm1))
+lmtest::bptest(deriv_lm1)
+plot(deriv_lm1)
+
+new_data_1 <- tibble(endemic = seq(from = min(df_lm$endemic), to = max(df_lm$endemic),
+                                     length = 15))
+
+
+prediction_endemic_1 <- predict.lm(deriv_lm1, newdata = new_data_1, se.fit = TRUE, type = "response")
+
+
+df_deriv_endemic <- cbind(new_data_1, prediction_endemic_1) |> 
+  mutate(category = factor("endemic")) |> 
+  rename(species_richness = endemic)
+
+# Non-native
+
+deriv_lm2 <- lm(mean_sign ~ non_native, data = df_lm)
+
+# checking model assumptions
+summary(deriv_lm2)
+shapiro.test(resid(deriv_lm2))
+lmtest::bptest(deriv_lm2)
+plot(deriv_lm2)
+
+new_data_2 <- tibble(non_native = seq(from = min(df_lm$non_native), to = max(df_lm$non_native),
+                                   length = 15))
+
+prediction_2 <- predict.lm(deriv_lm2, newdata = new_data_2, se.fit = TRUE, type = "response")
+
+df_deriv_nn <- cbind(new_data_2, prediction_2)  |> 
+  mutate(category = factor("non_native")) |> 
+  rename(species_richness = non_native)
+
+# Non-endemic native
+
+deriv_lm3 <- lm(mean_sign ~ native, data = df_lm)
+
+# checking model assumptions
+summary(deriv_lm3)
+shapiro.test(resid(deriv_lm3))
+lmtest::bptest(deriv_lm3)
+plot(deriv_lm3)
+
+
+new_data_3 <- tibble(native = seq(from = min(df_lm$native), to = max(df_lm$native),
+                                      length = 15))
+
+prediction_3 <- predict.lm(deriv_lm3, newdata = new_data_3, se.fit = TRUE, type = "response")
+
+df_deriv_nne <- cbind(new_data_3, prediction_3)  |> 
+  mutate(category = factor("non_endemic_native")) |> 
+  rename(species_richness = native)
+
+
+# Translocated (non-native to region) species
+
+deriv_lm4 <- lm(mean_sign ~ non_native_region, data = df_lm)
+
+# checking model assumptions
+summary(deriv_lm4)
+shapiro.test(resid(deriv_lm4))
+lmtest::bptest(deriv_lm4)
+plot(deriv_lm4)
+
+
+new_data_4 <- tibble(non_native_region = seq(from = min(df_lm$non_native_region), to = max(df_lm$non_native_region),
+                                              length = 15))
+
+prediction_4 <- predict.lm(deriv_lm4, newdata = new_data_4, se.fit = TRUE, type = "response")
+
+df_deriv_trans <- cbind(new_data_4, prediction_4)  |> 
+  mutate(category = factor("translocated")) |> 
+  rename(species_richness = non_native_region)
+
+
+# Combine all four lm predictions
+df_deriv_lms <- rbind(df_deriv_endemic, df_deriv_nn, df_deriv_nne, df_deriv_trans)
+
+
+mycolors <-  c("endemic"= "#63D8F2", "non_endemic_native"="#F26379", "non_native" = "#5A64D8",
+               "translocated" = "#F2AD63")
+
+
+
+lm_divergence_all <- df_deriv_lms|> 
+  ggplot(aes(species_richness, fit, color = category, fill = category)) +
+  geom_line(linewidth = 1, linetype = "dashed") +
+  geom_ribbon(aes(ymin = (fit - se.fit), ymax = (fit + se.fit)), color = NA, alpha = 0.3) +
+  theme_classic(base_size = 16) +
+  ylab("Mean divergence") +
+  xlab("Species richness") +
+  scale_fill_manual(values = mycolors,
+                    aesthetics = c("color", "fill"), 
+                    labels = c("endemic", "non-native", "non-endemic native", "translocated"),
+                    name = NULL)
+
+lm_divergence_all
+
+# save as TIFF
+# tiff(paste("total_models/plots/lm_divergence_all.tiff", sep = ""), units="in", width=11, height=7, res=300)
+# # plot(ggarrange(depth1, depth2, ncol = 2))
+# # plot science discussion
+# plot(lm_divergence_all)
+# 
+# dev.off()
+```
 #### Fig. 4b 
 Predictions of all species shown inside the categories. 
 ```{r, fig.show='hide'}
