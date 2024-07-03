@@ -1,4 +1,6 @@
 
+# test the stats
+
 # temp and depth models
 # stats
 glance_summary <- glance(gam_output)
