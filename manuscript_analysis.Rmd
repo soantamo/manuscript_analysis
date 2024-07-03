@@ -362,22 +362,11 @@ df_4 <- readRDS("data_frame_models/df_abundance_re")
 # predictions() can also be used directly with df_models -> takes longer
 # BECAUSE OF TYPO: RE RUN TEMP + DEPTH models from df1-3, df4 still needs to be run & stats overview too
 
-df_1to3_dept_temp <- bind_rows(df_1, df_2, df_3) |> 
-  filter(tot_abu > 20)
-
-df_1to3_dept_temp |> 
-  distinct(Species)
-
-predictions_depth_temp(df_1to3_dept_temp)
 # DO NOT RUN NOW, RUN LATER!
 predictions_depth_temp(df_1)
 predictions_depth_temp(df_2)
 predictions_depth_temp(df_3)
-# 4 not run yet, will wait with this
 predictions_depth_temp(df_4)
-
-
-stats_gamms(df_test)
 
 # statistics of the gamms
 total_models <- bind_rows(df_1, df_2, df_3, df_4)
@@ -394,6 +383,62 @@ saveRDS(df_predictions_all, "total_models/df_pred_all.rds")
 
 ```
 
+###AIC comparisons in special cases
+
+```{r}
+
+AIC_testing <- function(data2, i){
+  
+  data <- data2 |> 
+    filter(Species == i)
+  
+  data$fProtocol <- as.factor(data$Protocol)
+  data$fLake <- as.factor(data$Lake)
+  
+  model_0 <- gam(data = data, Abundance ~ s(mean_last_7days, k = 3) +
+                   s(Depth_sample, k = 3)
+                            + s(fLake, bs = 're')
+                            +  s(fProtocol, bs = 're'), family = ziP())
+  print(glance(model_0))
+# new models
+
+model1 <- gam(data = data, Presence ~ s(mean_last_7days, k = 3) + s(Depth_sample, k = 3)
+                            + s(fLake, bs = 're')
+                            +  s(fProtocol, bs = 're'), family = binomial)
+print(glance(model1))
+
+  
+model2 <- gam(data = data, Abundance ~ s(mean_last_7days, k = 3) +
+                            + s(fLake, bs = 're')
+                            +  s(fProtocol, bs = 're'), family = ziP())
+print(glance(model2))
+  
+}
+
+AIC_testing(df_4, "Lepomis_gibbosus")
+
+
+# in Alosa agone: model_0 not running, smaller AIC for binomial depth + temp model -> will be modelled as binomial depth + temp
+# same for Coregonus_sp_large_pelagic
+# lepomis gibbosus also has the smallest AIC for binomial depth + temp model
+
+# also testing the other special cases:
+ # "Alburnus_arborella", "Barbatula_sp_Lineage_I","Cyprinus_carpio", "Phoxinus_csikii", "Salmo_trutta"
+
+AIC_testing(df_4, "Alburnus_arborella") 
+# not running with model0, Binomial with depth and temp best
+AIC_testing(df_4, "Barbatula_sp_Lineage_I")
+# binomial depth and temp has lowest AIC
+AIC_testing(df_4, "Cyprinus_carpio")
+# binomial depth and temp has lowest AIC 
+AIC_testing(df_4, "Phoxinus_csikii")
+#binomial depth and temp has lowest AIC 
+AIC_testing(df_4, "Salmo_trutta")
+# binomial depth and temp lowest AIC
+
+# 8 models are run with binomial temp and depth
+
+```
 ####Fig. 2
 Overview of all model predictions
 
