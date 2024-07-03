@@ -360,7 +360,15 @@ df_4 <- readRDS("data_frame_models/df_abundance_re")
 
 #df1 and df2 are the fastest ones
 # predictions() can also be used directly with df_models -> takes longer
+# BECAUSE OF TYPO: RE RUN TEMP + DEPTH models from df1-3, df4 still needs to be run & stats overview too
 
+df_1to3_dept_temp <- bind_rows(df_1, df_2, df_3) |> 
+  filter(tot_abu > 20)
+
+df_1to3_dept_temp |> 
+  distinct(Species)
+
+predictions_depth_temp(df_1to3_dept_temp)
 # DO NOT RUN NOW, RUN LATER!
 predictions_depth_temp(df_1)
 predictions_depth_temp(df_2)
@@ -369,12 +377,11 @@ predictions_depth_temp(df_3)
 predictions_depth_temp(df_4)
 
 
+stats_gamms(df_test)
+
 # statistics of the gamms
 total_models <- bind_rows(df_1, df_2, df_3, df_4)
 
-# total_models |> 
-#   filter(tot_abu > 20) |> 
-#   distinct(Species, tot_abu)
 stats_gamms(total_models)
 
 #  compile data frame with all predictions from the saved species' model predictions
