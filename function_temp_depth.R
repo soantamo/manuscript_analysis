@@ -952,6 +952,12 @@ predictions_depth_temp <- function(df){
   
 }
 
+
+subs <- total_models |> 
+  filter(Species == "Cottus_sp_Po")
+df <- subs
+
+i <- "Cottus_sp_Po"
 stats_gamms <- function(df){
   require(broom)
   require(tidyverse)
@@ -987,10 +993,7 @@ stats_gamms <- function(df){
     data <- df |> 
       filter(Species == i) |> 
       mutate(n_lake = n_distinct(Lake))
-    
-    unique_lakes <- unique(data$fLake)
-    
-    random_lake <- sample(levels(unique_lakes), 1)
+  
     
     # temp depth models
     if(max(data$tot_abu) > 20){
@@ -1001,7 +1004,7 @@ stats_gamms <- function(df){
           
           print(paste(data$tot_abu[1], i))
           
-          gam_output <- gam(data = df, Presence ~ s(mean_last_7days, k = 3) + s(Depth_sample, k = 3)
+          gam_output <- gam(data = data, Presence ~ s(mean_last_7days, k = 3) + s(Depth_sample, k = 3)
                             +  s(fProtocol, bs = 're'), family = binomial)
           
           # stats
@@ -1051,7 +1054,7 @@ stats_gamms <- function(df){
         else if (max(data$Abundance) > 1)  {
           print(paste(data$tot_abu[1], i))
           
-          gam_output <- gam(data = df, Abundance ~ s(mean_last_7days, k = 3) + s(Depth_sample, k = 3)
+          gam_output <- gam(data = data, Abundance ~ s(mean_last_7days, k = 3) + s(Depth_sample, k = 3)
                             +  s(fProtocol, bs = 're'), family = ziP())
           
           # stats
@@ -1101,7 +1104,7 @@ stats_gamms <- function(df){
         else{
           print(paste(data$tot_abu[1], i))
           
-          gam_output <- gam(data = df, Abundance ~ s(mean_last_7days, k = 3) + s(Depth_sample, k = 3)
+          gam_output <- gam(data = data, Abundance ~ s(mean_last_7days, k = 3) + s(Depth_sample, k = 3)
                             +  s(fProtocol, bs = 're'), family = binomial)
           
           # stats
@@ -1159,7 +1162,7 @@ stats_gamms <- function(df){
           
           print(paste(data$tot_abu[1], i))
           
-          gam_output <- gam(data = df, Presence ~ s(mean_last_7days, k = 3) + s(Depth_sample, k = 3)
+          gam_output <- gam(data = data, Presence ~ s(mean_last_7days, k = 3) + s(Depth_sample, k = 3)
                             + s(fLake, bs = 're')
                             +  s(fProtocol, bs = 're'), family = binomial)
           
@@ -1210,7 +1213,7 @@ stats_gamms <- function(df){
           
           print(paste(data$tot_abu[1], i))
           
-          gam_output <- gam(data = df, Abundance ~ s(mean_last_7days, k = 3) + s(Depth_sample, k = 3)
+          gam_output <- gam(data = data, Abundance ~ s(mean_last_7days, k = 3) + s(Depth_sample, k = 3)
                             + s(fLake, bs = 're')
                             +  s(fProtocol, bs = 're'), family = ziP())
         
@@ -1261,7 +1264,7 @@ stats_gamms <- function(df){
           
           print(paste(data$tot_abu[1], i))
           
-          gam_output <- gam(data = df, Abundance ~ s(mean_last_7days, k = 3) + s(Depth_sample, k = 3)
+          gam_output <- gam(data = data, Abundance ~ s(mean_last_7days, k = 3) + s(Depth_sample, k = 3)
                             + s(fLake, bs = 're')
                             +  s(fProtocol, bs = 're'), family = binomial)
           
@@ -1637,6 +1640,6 @@ stats_gamms <- function(df){
   summary_df <- bind_rows(model_summary)
   
   # # Export the summary data frame to a text file
-  write_xlsx(summary_df, path = "total_summary_statistics.xlsx")   
+  write_xlsx(summary_df, path = "summary_stats.xlsx")   
   
 }
