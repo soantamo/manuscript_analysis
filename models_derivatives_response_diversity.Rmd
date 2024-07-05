@@ -52,113 +52,57 @@ df_4 <- readRDS("data_frame_models/df_abundance_re")
 # DHARMa and prediction output inside: 
 # total_models/gam_check
 # total_models/predictions
-# with three subfolders: temp, temp_test, depth_temp (total_models/predictions_depth_temp)
-
-df_exclusion <- df_4 |> 
-  filter(Species %in% c("Alburnus_arborella", "Barbatula_sp_Lineage_I",
-                   "Cyprinus_carpio", "Phoxinus_csikii", "Salmo_trutta", "Lepomis_gibbosus"))
+# with three subfolders: temp, temp_test, depth_temp (total_models/predictions/depth_temp)
 
 # all temperature models, no simplificaiton
-
-predictions(df_exclusion)
-
-predictions(df_1)
-predictions(df_2)
-predictions(df_3)
-predictions(df_4)
+# predictions(df_1)
+# predictions(df_2)
+# predictions(df_3)
+# predictions(df_4)
+# 
+# no_exclusion_predictions_all <- list.files(path = "total_models/predictions/temp_test", pattern = ".rds", full.names = TRUE) |>
+#   map_dfr(readRDS)
+# 
+# # save total predictions as RDS
+# saveRDS(no_exclusion_predictions_all, "total_models/df_pred_no_exclusion.rds")
 
 # temperature models with simplified models
+
 predictions_temp(df_1)
 predictions_temp(df_2)
 predictions_temp(df_3)
 predictions_temp(df_4)
 
-# sensitivity
-predictions_depth_temp(df_1)
-predictions_depth_temp(df_2)
-predictions_depth_temp(df_3)
-predictions_depth_temp(df_4)
-
-# issue with cottus sp po
-# statistics of the gamms
-total_models <- bind_rows(df_1, df_2, df_3, df_4)
-
-stats_gamms(total_models)
-
-#  compile data frame with all predictions from the saved species' model predictions
-
-df_predictions_all <- list.files(path = "total_models/depth_temp/predictions", pattern = ".rds", full.names = TRUE) |>
+no_exclusion_predictions_all <- list.files(path = "total_models/predictions/temp", pattern = ".rds", full.names = TRUE) |>
   map_dfr(readRDS)
 
 # save total predictions as RDS
-saveRDS(df_predictions_all, "total_models/df_pred_all.rds")
+saveRDS(no_exclusion_predictions_all, "total_models/df_pred_all.rds")
 
+# sensitivity
+# predictions_depth_temp(df_1)
+# predictions_depth_temp(df_2)
+# predictions_depth_temp(df_3)
+# predictions_depth_temp(df_4)
+# 
+# # issue with cottus sp po
+# # statistics of the gamms
+# total_models <- bind_rows(df_1, df_2, df_3, df_4)
+# 
+# stats_gamms(total_models)
+# 
+# #  compile data frame with all predictions from the saved species' model predictions
+# 
+# depth_temp_predictions_all <- list.files(path = "total_models/predictions/depth_temp", pattern = ".rds", full.names = TRUE) |>
+#   map_dfr(readRDS)
+# 
+# # save total predictions as RDS
+# saveRDS(depth_temp_predictions_all, "total_models/depth_temp_pred_all.rds")
 
-df_predictions_all <- list.files(path = "total_models/predictions", pattern = ".rds", full.names = TRUE) |>
-  map_dfr(readRDS)
 
 ```
 
-###AIC comparisons in special cases
 
-```{r}
-
-AIC_testing <- function(data2, i){
-  
-  data <- data2 |> 
-    filter(Species == i)
-  
-  data$fProtocol <- as.factor(data$Protocol)
-  data$fLake <- as.factor(data$Lake)
-  
-  # model_0 <- gam(data = data, Abundance ~ s(mean_last_7days, k = 3) +
-  #                  s(Depth_sample, k = 3)
-  #                           + s(fLake, bs = 're')
-  #                           +  s(fProtocol, bs = 're'), family = ziP())
-  # print(glance(model_0))
-
-
-model1 <- gam(data = data, Presence ~ s(mean_last_7days, k = 3) + s(Depth_sample, k = 3)
-                            + s(fLake, bs = 're')
-                            +  s(fProtocol, bs = 're'), family = binomial)
-print(glance(model1))
-
-  
-model2 <- gam(data = data, Abundance ~ s(mean_last_7days, k = 3) +
-                            + s(fLake, bs = 're')
-                            +  s(fProtocol, bs = 're'), family = ziP())
-print(glance(model2))
-  
-}
-
-AIC_testing(df_4, "Lepomis_gibbosus")
-
-
-# in Alosa agone: model_0 not running, smaller AIC for binomial depth + temp model -> will be modelled as binomial depth + temp
-# same for Coregonus_sp_large_pelagic
-# lepomis gibbosus also has the smallest AIC for binomial depth + temp model
-
-# also testing the other special cases:
- # "Alburnus_arborella", "Barbatula_sp_Lineage_I","Cyprinus_carpio", "Phoxinus_csikii", "Salmo_trutta"
-
-AIC_testing(df_4, "Alburnus_arborella") 
-# not running with model0, Binomial with depth and temp best
-AIC_testing(df_4, "Barbatula_sp_Lineage_I")
-# binomial depth and temp has lowest AIC
-AIC_testing(df_4, "Cyprinus_carpio")
-# binomial depth and temp has lowest AIC 
-AIC_testing(df_4, "Phoxinus_csikii")
-#binomial depth and temp has lowest AIC 
-AIC_testing(df_4, "Salmo_trutta")
-# binomial depth and temp lowest AIC
-
-# AIC_testing(df_4, "Cottus_sp_Po")
-# # best model is the temp, depth model
-
-AIC_testing(total_models, "Alburnus_arborella")
-# 8 models are run with binomial temp and depth
-
-```
 ####Fig. 2
 Overview of all model predictions
 
@@ -502,396 +446,6 @@ df_abundance_re <- readRDS("data_frame_models/df_abundance_re")
 df_abundance_re$fLake <- as.factor(df_abundance_re$Lake)
 df_abundance_re$fProtocol <- as.factor(df_abundance_re$Protocol)
 
-# separating the dfs to separate model types
-depth_binomial_gam <- df_binomial_gam |> 
-  filter(tot_abu > 20)
-
-temp_binomial_gam <- df_binomial_gam |> 
-  filter(tot_abu < 20)
-
-depth_abundance_gam <- df_abundance_gam |> 
-  filter(tot_abu > 20)
-
-temp_abundance_gam <- df_abundance_gam |> 
-  filter(tot_abu < 20)
-
-depth_binomial_re <- df_binomial_re |> 
-  filter(tot_abu > 20)
-
-temp_binomial_re <- df_binomial_re |> 
-  filter(tot_abu < 20)
-
-depth_abundance_re <- df_abundance_re |> 
-  filter(tot_abu > 20)
-
-temp_abundance_re <- df_abundance_re |> 
-  filter(tot_abu < 20)
-
-```
-
-###Depth and temp models
-```{r}
-# DEPTH AND TEMPERATURE
-# UNCLEAR HOW THIS CAN BE DONE
-# Model 1: Binomial data without random intercepts
-
-species_list <- depth_binomial_gam |>
-  distinct(Species) |>
-  pull(Species)
-
-species_list <- sort(species_list)
-
-derivatives <- list()
-gam_output <- list()
-model_prediction <- list()
-
-i <- "Salmo_sp_Blackspot"
-j <- "Poschiavo"
-# loop through the list of species
-for (i in species_list) {
-  data <- depth_binomial_gam |>
-    filter(Species == i)
-
-  lake_data <- species_lake |>
-    filter(Species == i)
-
-  gam_output[[i]] <- gam(data = data, Abundance ~ s(mean_last_7days, k = 3) +
-                           s(Depth_sample, k = 3) + s(fProtocol, bs = 're'),
-                         family = binomial)
-
-  lake_list <- distinct(lake_data, Lake) |>
-    pull()
-
-  # loop through all lakes where the species is present, lake list is based on the information from
-  # Projet Lac
-  for (j in lake_list){
-
-    data_lake <- species_lake |>
-      filter(Species == i) |>
-      filter(Lake == j)
-    
-    # using minimum and maximum temp in the lake for derivatives
-     newdata <- tibble(mean_last_7days = seq(from = min(data_lake$temp, na.rm = TRUE),
-                                             to = max(data_lake$temp, na.rm = TRUE)
-                                             ,length = 200), Depth_sample =
-                         mean(data$Depth_sample, na.rm = TRUE),
-                       fProtocol = factor("VERT"))
-     
-     # calculate derivatives
-     # derivatives <- derivatives(gam_output[[i]], data = newdata) |>
-     #   mutate(fLake = factor(j)) |>
-     #   mutate(species = factor(i))
-     #   rename(temp = data)
-     #  
-
-       
-       test_derivatives <- derivative_samples(gam_output[[i]]
-                                              , focal = "mean_last_7days", data = newdata)
-       
-       test_derivatives |>
-         filter(.draw <= 200) |>
-         ggplot(aes(x = mean_last_7days, y = .derivative, group = .draw)) +
-         geom_line(alpha = 0.5)
-       
-       derivatives <- test_derivatives |> 
-         filter(.draw == 500) |> 
-         mutate(fLake = factor(j)) |>
-         mutate(species = factor(i))
-       
-       derivatives |> 
-         ggplot(aes(mean_last_7days, .derivative)) +
-         geom_line()
-         
-     
-     saveRDS(derivatives, paste0("total_models/derivatives/derivatives_", i, "_",  j, ".rds"))
-  }
-}
-
-# needs to be discussed
-
-# nothing changed starting from here
-############################################################################3##3
-# Model 2.1: Abundance data and no random intercept for lake -> but binomial
-# Coregonus_sp_benthic_profundal did not run with ZIP and was thus
-# run with binomial. 
-
-species_list <- depth_abundance_gam |> 
-  # binomial one
-  filter(Species == "Coregonus_sp_benthic_profundal") |>
-  distinct(Species) |> 
-  pull(Species)
-
-species_list <- sort(species_list)
-
-derivatives <- list()
-gam_output <- list()
-model_prediction <- list()
-
-for (i in species_list) {
-  
-  data <- df_abundance_gam |> 
-    filter(Species == i)
-  
-  # binomial family instead of ZIP
-  gam_output[[i]] <- gam(data = data, Presence ~ s(mean_last_7days, k = 3) +
-                           s(fProtocol, bs = 're'), family = binomial())
-  
-  lake_data <- species_lake |>
-    filter(Species == i)
-  
-  lake_list <- distinct(lake_data, Lake) |>
-    pull()
-  
-  for (j in lake_list){
-    
-    data_lake <- species_lake |>
-      filter(Species == i) |>
-      filter(Lake == j)
-    
-    newdata <- tibble(mean_last_7days = seq(
-      from = min(data_lake$temp, na.rm = TRUE),
-      to = max(data_lake$temp, na.rm = TRUE), length = 200),
-      fProtocol = factor("VERT"))
-
-    derivatives <- derivatives(gam_output[[i]], data = newdata) |>
-      mutate(fLake = factor(j)) |>
-      mutate(species = factor(i)) |>
-      rename(temp = data)
-    
-    saveRDS(derivatives, paste0("total_models/derivatives/derivatives_", i, "_",  j, ".rds"))
-  }
-}
-
-
-# Model 2.2: Abundance data and no random intercept for lake -> ZIP
-# all other species in this group run with ZIP
-
-species_list <- df_abundance_gam |>
-  filter(!Species == "Coregonus_sp_benthic_profundal") |>
-  distinct(Species) |> 
-  pull(Species)
-
-species_list <- sort(species_list)
-
-derivatives <- list()
-gam_output <- list()
-model_prediction <- list()
-
-
-for (i in species_list) {
-  
-  data <- df_abundance_gam |> 
-    filter(Species == i)
-  
-  gam_output[[i]] <- gam(data = data, Abundance ~ s(mean_last_7days, k = 3) + s(fProtocol, bs = 're'),
-                         family = ziP())
-  
-  lake_data <- species_lake |>
-    filter(Species == i)
-  
-  lake_list <- distinct(lake_data, Lake) |>
-    pull()
-  
-  for (j in lake_list){
-    
-    data_lake <- species_lake |>
-      filter(Species == i) |>
-      filter(Lake == j)
-    
-    newdata <- tibble(mean_last_7days = seq(
-      from = min(data_lake$temp, na.rm = TRUE),
-      to = max(data_lake$temp, na.rm = TRUE), length = 200),
-      fProtocol = factor("VERT"))
-    
-    derivatives <- derivatives(gam_output[[i]], data = newdata) |>
-      mutate(fLake = factor(j)) |>
-      mutate(species = factor(i)) |>
-      rename(temp = data)
-    
-    saveRDS(derivatives, paste0("total_models/derivatives/derivatives_", i, "_",  j, ".rds"))
-  }
-}
-
-# Model 3: Binomial data and random intercept for lake 
-
-species_list <- df_binomial_re |> 
-  distinct(Species) |> 
-  pull(Species)
-
-species_list <- sort(species_list)
-
-derivatives <- list()
-gam_output <- list()
-model_prediction <- list()
-
-for (i in species_list) {
-  
-  data <- df_binomial_re |> 
-    filter(Species == i)
-  
-  gam_output[[i]] <- gam(data = data, Abundance ~ s(mean_last_7days, k = 3) + s(fLake, bs = "re")
-                         + s(fProtocol, bs = 're'), family = binomial)
-  
-  lake_data <- species_lake |>
-    filter(Species == i)
-  
-  lake_list <- distinct(lake_data, Lake) |>
-    pull()
-  
-  unique_lakes <- distinct(data, Lake) |> 
-    pull()
-
-  
-  for (j in lake_list){
-    
-    data_lake <- species_lake |>
-      filter(Species == i) |>
-      filter(Lake == j)
-    
-    # take all lakes where the species is present and take random one for 
-    # the data included in derivatives()
-    random_lake <- sample(unique_lakes, 1)
-  
-    newdata <- tibble(mean_last_7days = seq(
-      from = min(data_lake$temp, na.rm = TRUE),
-      to = max(data_lake$temp, na.rm = TRUE), lenqh = 200),
-      fProtocol = factor("VERT"), fLake = factor(random_lake))
-    
-    derivatives <- derivatives(gam_output[[i]], data = newdata) |>
-      mutate(fLake = factor(j)) |>
-      mutate(species = factor(i)) |>
-      rename(temp = data)
-    
-    saveRDS(derivatives, paste0("total_models/derivatives/derivatives_", i, "_",  j, ".rds"))
- 
-  }
-}
-
-# Model 4.1: Abundance data and random intercept for lake, simplified models
-# multiple species in this group were simplified and run with binomial
-
-species_list <- df_abundance_re |>
-  # simplified models
-  filter(Species %in% c("Alburnus_arborella", "Barbatula_sp_Lineage_I",
-                                "Cyprinus_carpio", "Phoxinus_csikii", "Salmo_trutta",
-                        "Lepomis_gibbosus")) |>
-  distinct(Species) |>
-  pull(Species)
-
-species_list <- sort(species_list)
-
-
-derivatives <- list()
-gam_output <- list()
-model_prediction <- list()
-
-
-for (i in species_list) {
-
-  data <- df_abundance_re |>
-    filter(Species == i)
-
-  gam_output[[i]] <- gam(data = data, Presence ~ s(mean_last_7days, k = 3) + s(fLake, bs = 're')
-                         +  s(fProtocol, bs = 're'), family = binomial)
-
-  lake_data <- species_lake |>
-    filter(Species == i)
-
-  lake_list <- distinct(lake_data, Lake) |>
-    pull()
-
-  unique_lakes <- distinct(data, Lake) |>
-    pull()
-
-  for (j in lake_list){
-
-    data_lake <- species_lake |>
-      filter(Species == i) |>
-      filter(Lake == j)
-
-    random_lake <- sample(unique_lakes, 1)
-    
-    newdata <- tibble(mean_last_7days = seq(
-      from = min(data_lake$temp, na.rm = TRUE),
-      to = max(data_lake$temp, na.rm = TRUE), length = 200),
-      fLake = factor(random_lake), fProtocol = factor("VERT"))
-    
-    derivatives <- derivatives(gam_output[[i]], data = newdata) |>
-      mutate(fLake = factor(j)) |>
-      mutate(species = factor(i)) |>
-      rename(temp = data)
-    saveRDS(derivatives, paste0("total_models/derivatives/derivatives_", i, "_",  j, ".rds"))
-
-  }
-}
-
-# Model 4.1: Abundance data and random intercept for lake, complex models
-
-species_list <- df_abundance_re |> 
-  # exclusion of simplified models
-  filter(!Species %in% c("Alburnus_arborella", "Barbatula_sp_Lineage_I",
-                        "Cyprinus_carpio", "Phoxinus_csikii", "Salmo_trutta", 
-                        "Lepomis_gibbosus")) |>
-  distinct(Species) |> 
-  pull(Species)
-
-species_list <- sort(species_list)
-
-derivatives <- list()
-gam_output <- list()
-model_prediction <- list()
-
-
-for (i in species_list) {
-  
-  data <- df_abundance_re |> 
-    filter(Species == i)
-  
-  gam_output[[i]] <- gam(data = data, Abundance ~ s(mean_last_7days, k = 3) + s(fLake, bs = 're')
-                         +  s(fProtocol, bs = 're'), family = ziP())
-  
-  lake_data <- species_lake |>
-    filter(Species == i)
-  
-  lake_list <- distinct(lake_data, Lake) |>
-    pull()
-  
-  unique_lakes <- distinct(data, Lake) |> 
-    pull()
-  
-  for (j in lake_list){
-    
-    data_lake <- species_lake |>
-      filter(Species == i) |>
-      filter(Lake == j)
-   
-    random_lake <- sample(unique_lakes, 1)
-
-    newdata <- tibble(mean_last_7days = seq(
-      from = min(data_lake$temp, na.rm = TRUE),
-      to = max(data_lake$temp, na.rm = TRUE), length = 200),
-      fLake = factor(random_lake), fProtocol = factor("VERT"))
-    
-    derivatives <- derivatives(gam_output[[i]], data = newdata) |>
-      mutate(fLake = factor(j)) |>
-      mutate(species = factor(i)) |>
-      rename(temp = data)
-    
-    saveRDS(derivatives, paste0("total_models/derivatives/derivatives_", i, "_",  j, ".rds"))
-
-  }
-}
-
-# save all the derivatives in one file
-
-df_deriv <- list.files(path = "total_models/derivatives", pattern = ".rds", full.names = TRUE) |> 
-  map_dfr(readRDS)
-
-saveRDS(df_deriv, "total_models/df_deriv_all.rds")
-
-# save total derivatives as RDS (no exclusions)
-# saveRDS(df_deriv, "total_models/df_deriv_all_no_excl.rds")
-
 ```
 
 ###Temp models
@@ -942,9 +496,9 @@ for (i in species_list) {
      derivatives <- derivatives(gam_output[[i]], data = newdata) |>
        mutate(fLake = factor(j)) |>
        mutate(species = factor(i)) |>
-       rename(temp = data)
+       rename(temp = mean_last_7days)
      
-     saveRDS(derivatives, paste0("total_models/derivatives/derivatives_", i, "_",  j, ".rds"))
+     saveRDS(derivatives, paste0("total_models/derivatives/simple/derivatives_", i, "_",  j, ".rds"))
   }
 }
 
@@ -993,10 +547,10 @@ for (i in species_list) {
 
     derivatives <- derivatives(gam_output[[i]], data = newdata) |>
       mutate(fLake = factor(j)) |>
-      mutate(species = factor(i)) |>
-      rename(temp = data)
+      mutate(species = factor(i))
+      rename(temp = mean_last_7days)
     
-    saveRDS(derivatives, paste0("total_models/derivatives/derivatives_", i, "_",  j, ".rds"))
+    saveRDS(derivatives, paste0("total_models/derivatives/simple/derivatives_", i, "_",  j, ".rds"))
   }
 }
 
@@ -1044,9 +598,9 @@ for (i in species_list) {
     derivatives <- derivatives(gam_output[[i]], data = newdata) |>
       mutate(fLake = factor(j)) |>
       mutate(species = factor(i)) |>
-      rename(temp = data)
+      rename(temp = mean_last_7days)
     
-    saveRDS(derivatives, paste0("total_models/derivatives/derivatives_", i, "_",  j, ".rds"))
+    saveRDS(derivatives, paste0("total_models/derivatives/simple/derivatives_", i, "_",  j, ".rds"))
   }
 }
 
@@ -1098,9 +652,9 @@ for (i in species_list) {
     derivatives <- derivatives(gam_output[[i]], data = newdata) |>
       mutate(fLake = factor(j)) |>
       mutate(species = factor(i)) |>
-      rename(temp = data)
+      rename(temp = mean_last_7days)
     
-    saveRDS(derivatives, paste0("total_models/derivatives/derivatives_", i, "_",  j, ".rds"))
+    saveRDS(derivatives, paste0("total_models/derivatives/simple/derivatives_", i, "_",  j, ".rds"))
  
   }
 }
@@ -1157,8 +711,8 @@ for (i in species_list) {
     derivatives <- derivatives(gam_output[[i]], data = newdata) |>
       mutate(fLake = factor(j)) |>
       mutate(species = factor(i)) |>
-      rename(temp = data)
-    saveRDS(derivatives, paste0("total_models/derivatives/derivatives_", i, "_",  j, ".rds"))
+      rename(temp = mean_last_7days)
+    saveRDS(derivatives, paste0("total_models/derivatives/simple/derivatives_", i, "_",  j, ".rds"))
 
   }
 }
@@ -1213,9 +767,9 @@ for (i in species_list) {
     derivatives <- derivatives(gam_output[[i]], data = newdata) |>
       mutate(fLake = factor(j)) |>
       mutate(species = factor(i)) |>
-      rename(temp = data)
+      rename(temp = mean_last_7days)
     
-    saveRDS(derivatives, paste0("total_models/derivatives/derivatives_", i, "_",  j, ".rds"))
+    saveRDS(derivatives, paste0("total_models/derivatives/simple/derivatives_", i, "_",  j, ".rds"))
 
   }
 }
