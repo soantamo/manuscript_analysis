@@ -74,11 +74,11 @@ predictions_temp(df_2)
 predictions_temp(df_3)
 predictions_temp(df_4)
 
-no_exclusion_predictions_all <- list.files(path = "total_models/predictions/temp", pattern = ".rds", full.names = TRUE) |>
+simplified_predictions_all <- list.files(path = "total_models/predictions/temp", pattern = ".rds", full.names = TRUE) |>
   map_dfr(readRDS)
 
 # save total predictions as RDS
-saveRDS(no_exclusion_predictions_all, "total_models/df_pred_all.rds")
+saveRDS(simplified_predictions_all, "total_models/df_pred_all.rds")
 
 # sensitivity
 # predictions_depth_temp(df_1)
@@ -101,6 +101,22 @@ saveRDS(no_exclusion_predictions_all, "total_models/df_pred_all.rds")
 # saveRDS(depth_temp_predictions_all, "total_models/depth_temp_pred_all.rds")
 
 
+```
+
+```{r}
+# check out lepomis gibbosus
+excl_model_predictions <- readRDS("total_models/df_pred_no_exclusion.rds")
+excl_model_predictions |> 
+  filter(species == "Lepomis_gibbosus") |> 
+    ggplot(aes(temp, fit)) +
+  # geom_ribbon(aes(ymin = (fit - se.fit), ymax = (fit + se.fit), fill = factor(species)), alpha = 0.3) +
+  geom_line(aes(color = factor(species))) +
+  theme_bw() +
+  facet_wrap(~species, scale = "free_y", labeller = labeller(species = label_wrap_gen(width = 10))) +
+  theme(strip.background = element_rect(fill = "lightgrey"), strip.text = element_text(size = 6)) +
+  scale_color_viridis(discrete = TRUE, guide = NULL, option = "G", aesthetics = c("color", "fill")) +
+  xlab("Temperature") +
+  ylab("Abundance")
 ```
 
 
