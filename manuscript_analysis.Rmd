@@ -392,11 +392,11 @@ AIC_testing <- function(data2, i){
   data$fProtocol <- as.factor(data$Protocol)
   data$fLake <- as.factor(data$Lake)
   
-  model_0 <- gam(data = data, Abundance ~ s(mean_last_7days, k = 3) +
-                   s(Depth_sample, k = 3)
-                            + s(fLake, bs = 're')
-                            +  s(fProtocol, bs = 're'), family = ziP())
-  print(glance(model_0))
+  # model_0 <- gam(data = data, Abundance ~ s(mean_last_7days, k = 3) +
+  #                  s(Depth_sample, k = 3)
+  #                           + s(fLake, bs = 're')
+  #                           +  s(fProtocol, bs = 're'), family = ziP())
+  # print(glance(model_0))
 
 
 model1 <- gam(data = data, Presence ~ s(mean_last_7days, k = 3) + s(Depth_sample, k = 3)
@@ -436,6 +436,7 @@ AIC_testing(df_4, "Salmo_trutta")
 # AIC_testing(df_4, "Cottus_sp_Po")
 # # best model is the temp, depth model
 
+AIC_testing(total_models, "Alburnus_arborella")
 # 8 models are run with binomial temp and depth
 
 ```
