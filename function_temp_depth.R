@@ -87,7 +87,7 @@ predictions_depth_temp <- function(df){
             mutate(species = factor(i))
           
           # saving the predictions
-          saveRDS(pred_df, paste0("total_models/predictions/predictions_",i,".rds"))
+          saveRDS(pred_df, paste0("total_models/predictions/depth_temp/predictions_",i,".rds"))
           
           # # stats
           # glance_summary <- glance(gam_output)
@@ -160,7 +160,7 @@ predictions_depth_temp <- function(df){
             mutate(species = factor(i))
           
           # saving the predictions
-          saveRDS(pred_df, paste0("total_models/predictions/predictions_",i,".rds"))
+          saveRDS(pred_df, paste0("total_models/predictions/depth_temp/predictions_",i,".rds"))
           
           # # stats
           # glance_summary <- glance(gam_output)
@@ -232,7 +232,7 @@ predictions_depth_temp <- function(df){
             mutate(species = factor(i))
           
           # saving the predictions
-          saveRDS(pred_df, paste0("total_models/predictions/predictions_",i,".rds"))
+          saveRDS(pred_df, paste0("total_models/predictions/depth_temp/predictions_",i,".rds"))
           
           # # stats
           # glance_summary <- glance(gam_output)
@@ -323,7 +323,7 @@ predictions_depth_temp <- function(df){
             rename(temp = mean_last_7days) |>
             mutate(species = factor(i))
           
-          saveRDS(pred_df, paste0("total_models/predictions/predictions_",i,".rds"))
+          saveRDS(pred_df, paste0("total_models/predictions/depth_temp/predictions_",i,".rds"))
           
           # # stats
           # glance_summary <- glance(gam_output)
@@ -468,7 +468,7 @@ predictions_depth_temp <- function(df){
             rename(temp = mean_last_7days) |>
             mutate(species = factor(i))
           
-          saveRDS(pred_df, paste0("total_models/predictions/predictions_",i,".rds"))
+          saveRDS(pred_df, paste0("total_models/predictions/depth_temp/predictions_",i,".rds"))
           
           # # stats
           # glance_summary <- glance(gam_output)
@@ -549,7 +549,7 @@ predictions_depth_temp <- function(df){
             mutate(species = factor(i))
           
           # saving the predictions
-          saveRDS(pred_df, paste0("total_models/predictions/predictions_",i,".rds"))
+          saveRDS(pred_df, paste0("total_models/predictions/depth_temp/predictions_",i,".rds"))
           
           # # stats
           # glance_summary <- glance(gam_output)
@@ -616,7 +616,7 @@ predictions_depth_temp <- function(df){
             rename(temp = mean_last_7days) |>
             mutate(species = factor(i))
           
-          saveRDS(pred_df, paste0("total_models/predictions/predictions_",i,".rds"))
+          saveRDS(pred_df, paste0("total_models/predictions/depth_temp/predictions_",i,".rds"))
           
           # # stats
           # glance_summary <- glance(gam_output)
@@ -682,7 +682,7 @@ predictions_depth_temp <- function(df){
           pred_df <- model_bind |>
             rename(temp = mean_last_7days) |>
             mutate(species = factor(i))
-          saveRDS(pred_df, paste0("total_models/predictions/predictions_",i,".rds"))
+          saveRDS(pred_df, paste0("total_models/predictions/depth_temp/predictions_",i,".rds"))
           
           # # stats
           # glance_summary <- glance(gam_output)
@@ -767,7 +767,7 @@ predictions_depth_temp <- function(df){
             rename(temp = mean_last_7days) |>
             mutate(species = factor(i))
           
-          saveRDS(pred_df, paste0("total_models/predictions/predictions_",i,".rds"))
+          saveRDS(pred_df, paste0("total_models/predictions/depth_temp/predictions_",i,".rds"))
           
           # # stats
           # glance_summary <- glance(gam_output)
@@ -832,7 +832,7 @@ predictions_depth_temp <- function(df){
             rename(temp = mean_last_7days) |>
             mutate(species = factor(i))
           
-          saveRDS(pred_df, paste0("total_models/predictions/predictions_",i,".rds"))
+          saveRDS(pred_df, paste0("total_models/predictions/depth_temp/predictions_",i,".rds"))
           
           # # stats
           # glance_summary <- glance(gam_output)
@@ -898,7 +898,7 @@ predictions_depth_temp <- function(df){
           pred_df <- model_bind |>
             rename(temp = mean_last_7days) |> 
             mutate(species = factor(i))
-          saveRDS(pred_df, paste0("total_models/predictions/predictions_",i,".rds"))
+          saveRDS(pred_df, paste0("total_models/predictions/depth_temp/predictions_",i,".rds"))
           
           # # stats
           # glance_summary <- glance(gam_output)
