@@ -6,8 +6,7 @@ output: html_document
 editor_options: 
   chunk_output_type: console
 ---
-#2. Data Analysis
-##General Additive Models
+#General Additive Models
 Running the predictions for all GAMs with the smaller data frames to reduce running 
 time. 
 
@@ -46,28 +45,20 @@ df_2 <- readRDS("data_frame_models/df_abundance_gam")
 df_3 <- readRDS("data_frame_models/df_binomial_re")
 df_4 <- readRDS("data_frame_models/df_abundance_re")
 
-# use own function predictions() from function_GAM.R to predict species' models
-# across all lakes
 
+# we have three different functions. One predictions() does not simply any models
+# predictions_temp() has multiple models that are simplified (see supplementary 
+# figures for the disucssion), predictions_depth_temp() models all species with 
+# abundance > 20 with both coviarates temperature and depth. 
+
+# For downstream analysis for thermal response diversity models from predictions_temp()
+# are used.
+
+# temperature models with simplified models 
 # predictions take VERY LONG! and two folders are needed to store the 
 # DHARMa and prediction output inside: 
 # total_models/gam_check
-# total_models/predictions
-# with three subfolders: temp, temp_test, depth_temp (total_models/predictions/depth_temp)
-
-# all temperature models, no simplificaiton
-# predictions(df_1)
-# predictions(df_2)
-# predictions(df_3)
-# predictions(df_4)
-# 
-# no_exclusion_predictions_all <- list.files(path = "total_models/predictions/temp_test", pattern = ".rds", full.names = TRUE) |>
-#   map_dfr(readRDS)
-# 
-# # save total predictions as RDS
-# saveRDS(no_exclusion_predictions_all, "total_models/df_pred_no_exclusion.rds")
-
-# temperature models with simplified models
+# needs a folder called total_models/predictions/temp
 
 predictions_temp(df_1)
 predictions_temp(df_2)
@@ -80,6 +71,36 @@ simplified_predictions_all <- list.files(path = "total_models/predictions/temp",
 # save total predictions as RDS
 saveRDS(simplified_predictions_all, "total_models/df_pred_all.rds")
 
+# you can directly use the dataframe df_pred_all for downstream analysis
+
+```
+###Simplification and temp depth models
+```{r}
+# both other functions: 
+
+# you can also directly use the dataframe df_pred_no_simplification for decisions about
+# which models should be simplified 
+# and
+# depth_temp_pred_all for the sensitivity testing of the temp + depth models 
+
+# testing for which models need to be simplified
+# needs a folder: total_models/predictions/temp_test
+
+# all temperature models, no simplificaiton
+# predictions(df_1)
+# predictions(df_2)
+# predictions(df_3)
+# predictions(df_4)
+# 
+# no_exclusion_predictions_all <- list.files(path = "total_models/predictions/temp_test", pattern = ".rds", full.names = TRUE) |>
+#   map_dfr(readRDS)
+# 
+# # save total predictions as RDS
+# saveRDS(no_exclusion_predictions_all, "total_models/df_pred_no_simplification.rds")
+
+# testing if modelling temp and depth improves the models
+# needs a folder: total_models/predictions/depth_temp
+
 # sensitivity
 # predictions_depth_temp(df_1)
 # predictions_depth_temp(df_2)
@@ -87,7 +108,8 @@ saveRDS(simplified_predictions_all, "total_models/df_pred_all.rds")
 # predictions_depth_temp(df_4)
 # 
 # # issue with cottus sp po
-# # statistics of the gamms
+
+# # statistics of the gamms with dept and temp
 # total_models <- bind_rows(df_1, df_2, df_3, df_4)
 # 
 # stats_gamms(total_models)
@@ -100,28 +122,10 @@ saveRDS(simplified_predictions_all, "total_models/df_pred_all.rds")
 # # save total predictions as RDS
 # saveRDS(depth_temp_predictions_all, "total_models/depth_temp_pred_all.rds")
 
-
 ```
 
-```{r}
-# check out lepomis gibbosus
-excl_model_predictions <- readRDS("total_models/df_pred_no_exclusion.rds")
-excl_model_predictions |> 
-  filter(species == "Lepomis_gibbosus") |> 
-    ggplot(aes(temp, fit)) +
-  # geom_ribbon(aes(ymin = (fit - se.fit), ymax = (fit + se.fit), fill = factor(species)), alpha = 0.3) +
-  geom_line(aes(color = factor(species))) +
-  theme_bw() +
-  facet_wrap(~species, scale = "free_y", labeller = labeller(species = label_wrap_gen(width = 10))) +
-  theme(strip.background = element_rect(fill = "lightgrey"), strip.text = element_text(size = 6)) +
-  scale_color_viridis(discrete = TRUE, guide = NULL, option = "G", aesthetics = c("color", "fill")) +
-  xlab("Temperature") +
-  ylab("Abundance")
-```
-
-
-####Fig. 2
-Overview of all model predictions
+####Fig. 2b
+New figure 2b with categories across all lakes
 
 ```{r, fig.show='hide'}
 
@@ -136,7 +140,6 @@ levels(model_predictions$species)
 species_across_lakes <-  read_xlsx("species_category_across_lakes.xlsx") |> 
   select(-notes) |> 
     mutate(category = ifelse(category == "native", "non_endemic_native", category)) |>
-  mutate(category = ifelse(category == "non_native_region", "non_endemic_native_and_translocated", category)) |> 
   mutate(category2 = factor("all"))
 
 species_across_lakes$category <- as.factor(species_across_lakes$category)
@@ -145,30 +148,24 @@ levels(species_across_lakes$category)
 #merge predictions with categories
 predictions_categories <- merge(model_predictions, species_across_lakes)
 
-# EVTL NEW PLOT 2
 # change category names for facet_wrap
 category_names <- c(
   `endemic` = "endemic",
-  `endemic_and_translocated` = "translocated endemic",
   `non_endemic_native` = "non-endemic native",
-  `non_endemic_native_and_translocated` = "translocated non-endemic native",
   `non_native` = "non-native"
 )
 
 # colors for the plot
-mycolors1 <-  c("endemic"= "#63D8F2", "non_endemic_native"="#F26379", "non_native" = "#5A64D8",
-                "endemic_and_translocated" = "#F2AD63", "non_endemic_native_and_translocated" = "#F2AD63")
+mycolors1 <-  c("endemic"= "#63D8F2", "non_endemic_native"="#F26379", "non_native" = "#5A64D8")
 
 # Rescale the predictions to 0-1 
 predictions_categories_rescaled <- predictions_categories |>
   group_by(species) |>
   mutate(fit_rescaled = (fit - min(fit)) / (max(fit) - min(fit)))
 
-plot_pred <- predictions_categories_rescaled |>
+plot_2b <- predictions_categories_rescaled |>
   ggplot(aes(temp, fit_rescaled, group = species, color = category)) +
-  geom_line() +
-  # how can I get the right color?
-   # geom_ribbon(aes(ymin = (fit - se.fit), ymax = (fit + se.fit)), alpha = 0.3) +
+   geom_line(linewidth = 0.5) +
   theme_bw(base_size = 16) +
   ylab("Abundance") +
   xlab("Temperature") +
@@ -178,27 +175,64 @@ plot_pred <- predictions_categories_rescaled |>
         legend.position = "bottom",
         legend.title = element_blank()) 
 
-plot_category_predictions <- plot_pred + facet_grid(~category, labeller = as_labeller(category_names))
+plot_2b_final <- plot_2b + facet_grid(~category, labeller = as_labeller(category_names))
 
-plot_category_predictions
+plot_2b_final
 
+# save plot as TIFF
+# tiff(paste("total_models/plots/plot_2b.tiff", sep = ""), units="in", width=10, height=4, res=300)
+# 
+# plot(plot_2b_final)
+# 
+# dev.off()
+
+
+```
+
+####Fig. Supplementary predictions plot
+```{r}
+# also using predictions_categories from chunk above
 # trying to group by category and color
-figure_test_2 <- predictions_categories |>
+
+str(categories_supp)
+
+categories_supp <- predictions_categories |>
+  arrange(category) |> 
+  mutate(species = fct_reorder(species, as.numeric(category))) |> 
   ggplot(aes(temp, fit)) +
   geom_ribbon(aes(ymin = (fit - se.fit), ymax = (fit + se.fit), fill = factor(category)), alpha = 0.3) +
   geom_line(aes(color = factor(category))) +
   theme_bw() +
-  facet_wrap(~species + category, scale = "free_y", labeller = labeller(species = label_wrap_gen(width = 10))) +
+  facet_wrap(~species, scale = "free_y", labeller = labeller(species = label_wrap_gen(width = 10))) +
   theme(strip.background = element_rect(fill = "lightgrey"), strip.text = element_text(size = 6)) +
   scale_color_manual(values = mycolors1, aesthetics = c("color", "fill")) +
   xlab("Temperature") +
   ylab("Abundance")
 
-# tiff(paste("total_models/plots/draft_all_predictions.tiff", sep = ""), units="in", width = 12, height=8, res=300)
-# plot(figure_test_2)
+categories_supp
+
+# tiff(paste("total_models/plots/supplementary_predictions.tiff", sep = ""), units="in", width = 12, height=8, res=300)
+# plot(categories_supp)
 # 
 # # Closing the graphical device
 # dev.off()
+
+```
+##Sensitivity testing
+Testing if depth-driven temperature models can adequately fit abundance data compared to a temperature and depth model. 
+
+```{r}
+temp_only <- readRDS("total_models/df_pred_all.rds") |> 
+  mutate(category = "temp")
+temp_depth <- readRDS("total_models/depth_temp_pred_all.rds") |> 
+  mutate(category = "temp_depth")
+
+sensitivity
+
+```
+
+
+```{r}
 
 # OLD FIGURE 2
 
@@ -220,14 +254,7 @@ all_predictions
 # 
 # # Closing the graphical device
 # dev.off()
-
 ```
-
-##Sensitivity testing
-NOT CHANGED 
-Testing if depth-driven temperature models can adequately fit abundance data compared to
-a temperature and depth model. 
-Models were compared in the eleven most abundant species. 
 
 ```{r}
 # Read in abundance and depth data of all species included for modelling
@@ -426,8 +453,9 @@ levels(sensitivity_predictions$species)
 # dev.off()
 
 ```
-##Derivatives calculation 
+#Derivatives calculation 
 
+##Data preparation
 We calculated derivatives for each species per lake.
 
 ```{r}
@@ -466,7 +494,7 @@ df_abundance_re$fProtocol <- as.factor(df_abundance_re$Protocol)
 
 ```
 
-###Temp models
+##Derivatives
 ```{r}
 
 # Now four different loops are run to calculate derivatives of each species 
@@ -677,62 +705,6 @@ for (i in species_list) {
   }
 }
 
-# Model 4: before simplification
-
-species_list <- df_abundance_re |> 
-  # exclusion of simplified models
-  filter(Species %in% c("Alburnus_arborella", "Barbatula_sp_Lineage_I",
-                        "Cyprinus_carpio", "Phoxinus_csikii", "Salmo_trutta",
-                        "Lepomis_gibbosus")) |>
-  distinct(Species) |> 
-  pull(Species)
-
-species_list <- sort(species_list)
-
-derivatives <- list()
-gam_output <- list()
-model_prediction <- list()
-
-
-for (i in species_list) {
-  
-  data <- df_abundance_re |> 
-    filter(Species == i)
-  
-  gam_output[[i]] <- gam(data = data, Abundance ~ s(mean_last_7days, k = 3) + s(fLake, bs = 're')
-                         +  s(fProtocol, bs = 're'), family = ziP())
-  
-  lake_data <- species_lake |>
-    filter(Species == i)
-  
-  lake_list <- distinct(lake_data, Lake) |>
-    pull()
-  
-  unique_lakes <- distinct(data, Lake) |> 
-    pull()
-  
-  for (j in lake_list){
-    
-    data_lake <- species_lake |>
-      filter(Species == i) |>
-      filter(Lake == j)
-   
-    random_lake <- sample(unique_lakes, 1)
-
-    newdata <- tibble(mean_last_7days = seq(
-      from = min(data_lake$temp, na.rm = TRUE),
-      to = max(data_lake$temp, na.rm = TRUE), length = 200),
-      fLake = factor(random_lake), fProtocol = factor("VERT"))
-    
-    derivatives <- derivatives(gam_output[[i]], data = newdata) |>
-      mutate(fLake = factor(j)) |>
-      mutate(species = factor(i)) |>
-      rename(temp = mean_last_7days)
-    
-    saveRDS(derivatives, paste0("total_models/derivatives_no_simplification/derivatives_", i, "_",  j, ".rds"))
-
-  }
-}
 
 # Model 4.1: Abundance data and random intercept for lake, simplified models
 # multiple species in this group were simplified and run with binomial
@@ -740,8 +712,7 @@ for (i in species_list) {
 species_list <- df_abundance_re |>
   # simplified models
   filter(Species %in% c("Alburnus_arborella", "Barbatula_sp_Lineage_I",
-                                "Cyprinus_carpio", "Phoxinus_csikii", "Salmo_trutta",
-                        "Lepomis_gibbosus")) |>
+                        "Cyprinus_carpio","Phoxinus_csikii", "Salmo_trutta")) |>
   distinct(Species) |>
   pull(Species)
 
@@ -797,8 +768,7 @@ for (i in species_list) {
 species_list <- df_abundance_re |> 
   # exclusion of simplified models
   filter(!Species %in% c("Alburnus_arborella", "Barbatula_sp_Lineage_I",
-                        "Cyprinus_carpio", "Phoxinus_csikii", "Salmo_trutta",
-                        "Lepomis_gibbosus")) |>
+                        "Cyprinus_carpio", "Phoxinus_csikii", "Salmo_trutta")) |>
   distinct(Species) |> 
   pull(Species)
 
@@ -856,6 +826,69 @@ df_deriv <- list.files(path = "total_models/derivatives", pattern = ".rds", full
 
 saveRDS(df_deriv, "total_models/df_deriv_all.rds")
 
+```
+
+#Testing derivatives
+##Simplification of models
+```{r}
+# to get the derivatives before simplifying any model: 
+# copy all other derivatives to a new folder called total_models/derivatives_no_simplification and then run this code. 
+
+# # Model 4: before simplification
+# species_list <- df_abundance_re |>
+#   # no simplification
+#   filter(Species %in% c("Alburnus_arborella", "Barbatula_sp_Lineage_I",
+#                         "Cyprinus_carpio", "Phoxinus_csikii", "Salmo_trutta")) |>
+#   distinct(Species) |> 
+#   pull(Species)
+# 
+# species_list <- sort(species_list)
+# 
+# derivatives <- list()
+# gam_output <- list()
+# model_prediction <- list()
+# 
+# 
+# for (i in species_list) {
+#   
+#   data <- df_abundance_re |> 
+#     filter(Species == i)
+#   
+#   gam_output[[i]] <- gam(data = data, Abundance ~ s(mean_last_7days, k = 3) + s(fLake, bs = 're')
+#                          +  s(fProtocol, bs = 're'), family = ziP())
+#   
+#   lake_data <- species_lake |>
+#     filter(Species == i)
+#   
+#   lake_list <- distinct(lake_data, Lake) |>
+#     pull()
+#   
+#   unique_lakes <- distinct(data, Lake) |> 
+#     pull()
+#   
+#   for (j in lake_list){
+#     
+#     data_lake <- species_lake |>
+#       filter(Species == i) |>
+#       filter(Lake == j)
+#    
+#     random_lake <- sample(unique_lakes, 1)
+# 
+#     newdata <- tibble(mean_last_7days = seq(
+#       from = min(data_lake$temp, na.rm = TRUE),
+#       to = max(data_lake$temp, na.rm = TRUE), length = 200),
+#       fLake = factor(random_lake), fProtocol = factor("VERT"))
+#     
+#     derivatives <- derivatives(gam_output[[i]], data = newdata) |>
+#       mutate(fLake = factor(j)) |>
+#       mutate(species = factor(i)) |>
+#       rename(temp = mean_last_7days)
+#     
+#     saveRDS(derivatives, paste0("total_models/derivatives_no_simplification/derivatives_", i, "_",  j, ".rds"))
+# 
+#   }
+# }
+
 # save total derivatives as RDS (no exclusions)
 # 
 # df_deriv_no_excl <- list.files(path = "total_models/derivatives_no_simplification", pattern = ".rds", full.names = TRUE) |>
@@ -863,53 +896,9 @@ saveRDS(df_deriv, "total_models/df_deriv_all.rds")
 # 
 # saveRDS(df_deriv_no_excl, "total_models/df_deriv_all_no_excl.rds")
 
-
 ```
 
-###Fig. S2 
-Overview of derivatives in each lake community
-
-```{r}
-# Read in derivative data
-all_models_derivatives <- readRDS("total_models/df_deriv_all.rds")
-all_derivatives <- as_tibble(all_models_derivatives)
-
-str(all_derivatives)
-
-# Highlighting species with interesting derivatives: 
-species_group <- all_derivatives |> 
-  filter(species %in% c("Phoxinus_csikii", "Barbatula_sp_Lineage_II", "Cottus_sp_Po_profundal")) |> 
-  distinct(species) |> 
-  pull(species)
-
-# Plot S2: derivatives included in each lake community
-overview_derivatives <- all_derivatives |>
-  arrange(fLake) |> 
-  ggplot(aes(temp, .derivative, color = species)) +
-  geom_line() +
-  facet_wrap(~fLake) +
-  theme_bw(base_size = 16) +
-  scale_color_viridis(discrete = TRUE, breaks = species_group, option = "G") +
-  xlab("Temperature") +
-  ylab("Derivatives") +
-  theme(panel.grid.major = element_blank(), 
-        panel.grid.minor = element_blank(), 
-        legend.position = "right",
-        legend.title = element_blank()) +
-  geom_hline(yintercept = 0, color = "#7A7A7A")
- 
-  
-overview_derivatives
-
-# save as TIFF
-# tiff(paste("total_models/plots/overview_derivatives_lake.tiff", sep = ""), units="in", width=11, height=7, res=300)
-# 
-# plot(overview_derivatives)
-# 
-# dev.off()
-```
-
-###Fig. S3
+##Fig. S3ab
 
 ```{r}
 # cyprinus carpio and lepomis should not be simplified
@@ -979,10 +968,28 @@ plot_percentiles_1
 # 
 # dev.off()
 
-# above 90% = 2.018455e+01
+# above the 85th percentile
+
 df_quantiles |> 
   filter(.derivative > 2.018455e+01) |> 
   distinct(species)
+
+# 1 Alburnus_arborella    
+# 2 Barbatula_sp_Lineage_I
+# 3 Cyprinus_carpio       
+# 4 Phoxinus_csikii       
+# 5 Salmo_trutta 
+
+# NEW: upon inclusion of Lepomis gibbosus
+# above 90% = 3.013806e+01
+df_quantiles |> 
+  filter(.derivative > 3.013806e+01) |> 
+  distinct(species)
+
+# 1 Alburnus_arborella    
+# 2 Barbatula_sp_Lineage_I
+# 3 Phoxinus_csikii       
+# 4 Salmo_trutta 
 
 # 5 species above 90% -> those will be simplified to binomial 
 # 1 Alburnus_arborella    
@@ -1025,15 +1032,58 @@ derivative_percentiles_2 <- mean_deriv_plot +
 derivative_percentiles_2
 
 # save plot as TIFF
-tiff(paste("total_models/plots/plot_deriv_percentiles_2.tiff", sep = ""), units="in", width=19, height=12, res=300)
-
-plot(derivative_percentiles_2)
-
-dev.off()
+# tiff(paste("total_models/plots/plot_deriv_percentiles_2.tiff", sep = ""), units="in", width=19, height=12, res=300)
+# 
+# plot(derivative_percentiles_2)
+# 
+# dev.off()
 
 ```
 
-##Calculating thermal response diversity
+##Fig. S2: Overview derivatives
+Overview of derivatives in each lake community
+
+```{r}
+# Read in derivative data
+all_models_derivatives <- readRDS("total_models/df_deriv_all.rds")
+all_derivatives <- as_tibble(all_models_derivatives)
+
+str(all_derivatives)
+
+# Highlighting species with interesting derivatives: 
+species_group <- all_derivatives |> 
+  filter(species %in% c("Phoxinus_csikii", "Barbatula_sp_Lineage_II", "Cottus_sp_Po_profundal")) |> 
+  distinct(species) |> 
+  pull(species)
+
+# Plot S2: derivatives included in each lake community
+overview_derivatives <- all_derivatives |>
+  arrange(fLake) |> 
+  ggplot(aes(temp, .derivative, color = species)) +
+  geom_line() +
+  facet_wrap(~fLake) +
+  theme_bw(base_size = 16) +
+  scale_color_viridis(discrete = TRUE, breaks = species_group, option = "G") +
+  xlab("Temperature") +
+  ylab("Derivatives") +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        legend.position = "right",
+        legend.title = element_blank()) +
+  geom_hline(yintercept = 0, color = "#7A7A7A")
+ 
+  
+overview_derivatives
+
+# save as TIFF
+# tiff(paste("total_models/plots/overview_derivatives_lake.tiff", sep = ""), units="in", width=11, height=7, res=300)
+# 
+# plot(overview_derivatives)
+# 
+# dev.off()
+```
+
+#Calculating thermal response diversity
 
 ```{r}
 # Function provided by Ross et al. "How to measure response diversity" used to calculate
