@@ -259,7 +259,7 @@ predictions_temp <- function(df){
       
       # simplified models
       if (i %in% c("Alburnus_arborella", "Barbatula_sp_Lineage_I",
-                   "Cyprinus_carpio", "Phoxinus_csikii", "Salmo_trutta", "Lepomis_gibbosus")){
+                   "Cyprinus_carpio", "Phoxinus_csikii", "Salmo_trutta")){
         
         
         gam_output<- gam(data = data, Presence ~ s(mean_last_7days, k = 3) + s(fLake, bs = 're')
