@@ -28,6 +28,7 @@ library(DHARMa)
 library(mgcViz)
 library(gridExtra)
 library(grid)
+library(viridis)
 
 # function for the temperature only GAMs
 source(here("function_GAM.R"))
@@ -107,6 +108,7 @@ saveRDS(no_exclusion_predictions_all, "total_models/df_pred_all.rds")
 Overview of all model predictions
 
 ```{r, fig.show='hide'}
+
 # Load total predictions
 model_predictions <- readRDS("total_models/df_pred_all.rds")
 
@@ -498,7 +500,7 @@ for (i in species_list) {
        mutate(species = factor(i)) |>
        rename(temp = mean_last_7days)
      
-     saveRDS(derivatives, paste0("total_models/derivatives/simple/derivatives_", i, "_",  j, ".rds"))
+     saveRDS(derivatives, paste0("total_models/derivatives/derivatives_", i, "_",  j, ".rds"))
   }
 }
 
@@ -547,10 +549,10 @@ for (i in species_list) {
 
     derivatives <- derivatives(gam_output[[i]], data = newdata) |>
       mutate(fLake = factor(j)) |>
-      mutate(species = factor(i))
+      mutate(species = factor(i)) |> 
       rename(temp = mean_last_7days)
     
-    saveRDS(derivatives, paste0("total_models/derivatives/simple/derivatives_", i, "_",  j, ".rds"))
+    saveRDS(derivatives, paste0("total_models/derivatives/derivatives_", i, "_",  j, ".rds"))
   }
 }
 
@@ -600,7 +602,7 @@ for (i in species_list) {
       mutate(species = factor(i)) |>
       rename(temp = mean_last_7days)
     
-    saveRDS(derivatives, paste0("total_models/derivatives/simple/derivatives_", i, "_",  j, ".rds"))
+    saveRDS(derivatives, paste0("total_models/derivatives/derivatives_", i, "_",  j, ".rds"))
   }
 }
 
@@ -646,7 +648,7 @@ for (i in species_list) {
   
     newdata <- tibble(mean_last_7days = seq(
       from = min(data_lake$temp, na.rm = TRUE),
-      to = max(data_lake$temp, na.rm = TRUE), lenqh = 200),
+      to = max(data_lake$temp, na.rm = TRUE), length = 200),
       fProtocol = factor("VERT"), fLake = factor(random_lake))
     
     derivatives <- derivatives(gam_output[[i]], data = newdata) |>
@@ -654,8 +656,65 @@ for (i in species_list) {
       mutate(species = factor(i)) |>
       rename(temp = mean_last_7days)
     
-    saveRDS(derivatives, paste0("total_models/derivatives/simple/derivatives_", i, "_",  j, ".rds"))
+    saveRDS(derivatives, paste0("total_models/derivatives/derivatives_", i, "_",  j, ".rds"))
  
+  }
+}
+
+# Model 4: before simplification
+
+species_list <- df_abundance_re |> 
+  # exclusion of simplified models
+  filter(Species %in% c("Alburnus_arborella", "Barbatula_sp_Lineage_I",
+                        "Cyprinus_carpio", "Phoxinus_csikii", "Salmo_trutta",
+                        "Lepomis_gibbosus")) |>
+  distinct(Species) |> 
+  pull(Species)
+
+species_list <- sort(species_list)
+
+derivatives <- list()
+gam_output <- list()
+model_prediction <- list()
+
+
+for (i in species_list) {
+  
+  data <- df_abundance_re |> 
+    filter(Species == i)
+  
+  gam_output[[i]] <- gam(data = data, Abundance ~ s(mean_last_7days, k = 3) + s(fLake, bs = 're')
+                         +  s(fProtocol, bs = 're'), family = ziP())
+  
+  lake_data <- species_lake |>
+    filter(Species == i)
+  
+  lake_list <- distinct(lake_data, Lake) |>
+    pull()
+  
+  unique_lakes <- distinct(data, Lake) |> 
+    pull()
+  
+  for (j in lake_list){
+    
+    data_lake <- species_lake |>
+      filter(Species == i) |>
+      filter(Lake == j)
+   
+    random_lake <- sample(unique_lakes, 1)
+
+    newdata <- tibble(mean_last_7days = seq(
+      from = min(data_lake$temp, na.rm = TRUE),
+      to = max(data_lake$temp, na.rm = TRUE), length = 200),
+      fLake = factor(random_lake), fProtocol = factor("VERT"))
+    
+    derivatives <- derivatives(gam_output[[i]], data = newdata) |>
+      mutate(fLake = factor(j)) |>
+      mutate(species = factor(i)) |>
+      rename(temp = mean_last_7days)
+    
+    saveRDS(derivatives, paste0("total_models/derivatives_no_simplification/derivatives_", i, "_",  j, ".rds"))
+
   }
 }
 
@@ -712,7 +771,7 @@ for (i in species_list) {
       mutate(fLake = factor(j)) |>
       mutate(species = factor(i)) |>
       rename(temp = mean_last_7days)
-    saveRDS(derivatives, paste0("total_models/derivatives/simple/derivatives_", i, "_",  j, ".rds"))
+    saveRDS(derivatives, paste0("total_models/derivatives/derivatives_", i, "_",  j, ".rds"))
 
   }
 }
@@ -722,7 +781,7 @@ for (i in species_list) {
 species_list <- df_abundance_re |> 
   # exclusion of simplified models
   filter(!Species %in% c("Alburnus_arborella", "Barbatula_sp_Lineage_I",
-                        "Cyprinus_carpio", "Phoxinus_csikii", "Salmo_trutta", 
+                        "Cyprinus_carpio", "Phoxinus_csikii", "Salmo_trutta",
                         "Lepomis_gibbosus")) |>
   distinct(Species) |> 
   pull(Species)
@@ -769,20 +828,25 @@ for (i in species_list) {
       mutate(species = factor(i)) |>
       rename(temp = mean_last_7days)
     
-    saveRDS(derivatives, paste0("total_models/derivatives/simple/derivatives_", i, "_",  j, ".rds"))
+    saveRDS(derivatives, paste0("total_models/derivatives/derivatives_", i, "_",  j, ".rds"))
 
   }
 }
 
 # save all the derivatives in one file
-
-df_deriv <- list.files(path = "total_models/derivatives", pattern = ".rds", full.names = TRUE) |> 
+# 
+df_deriv <- list.files(path = "total_models/derivatives", pattern = ".rds", full.names = TRUE) |>
   map_dfr(readRDS)
 
 saveRDS(df_deriv, "total_models/df_deriv_all.rds")
 
 # save total derivatives as RDS (no exclusions)
-# saveRDS(df_deriv, "total_models/df_deriv_all_no_excl.rds")
+# 
+# df_deriv_no_excl <- list.files(path = "total_models/derivatives_no_simplification", pattern = ".rds", full.names = TRUE) |>
+#   map_dfr(readRDS)
+# 
+# saveRDS(df_deriv_no_excl, "total_models/df_deriv_all_no_excl.rds")
+
 
 ```
 
@@ -805,7 +869,7 @@ species_group <- all_derivatives |>
 # Plot S2: derivatives included in each lake community
 overview_derivatives <- all_derivatives |>
   arrange(fLake) |> 
-  ggplot(aes(temp, derivative, color = species)) +
+  ggplot(aes(temp, .derivative, color = species)) +
   geom_line() +
   facet_wrap(~fLake) +
   theme_bw(base_size = 16) +
@@ -832,31 +896,34 @@ overview_derivatives
 ###Fig. S3
 
 ```{r}
+# cyprinus carpio and lepomis should not be simplified
+
 # Data of the derivatives before simplifying multiple models
 # without changes the 5 species were not run with simplified models. 
 all_models_derivatives_no_excl <- readRDS("total_models/df_deriv_all_no_excl.rds")
 df_deriv_no_excl <- as_tibble(all_models_derivatives_no_excl)
+
 
 # Plot Figure S3a
 #calculating maximum and mean derivatives for each species per lake
 
 df_quantiles <- df_deriv_no_excl |> 
   group_by(species, fLake) |> 
-  mutate(max_derivative = max(derivative)) |> 
-  mutate(mean_derivative = mean(derivative)) |> 
+  mutate(max_derivative = max(.derivative)) |> 
+  mutate(mean_derivative = mean(.derivative)) |> 
   ungroup()
 
 # calculate quantiles of derivatives
-transform(quantile(df_quantiles$derivative,
+transform(quantile(df_quantiles$.derivative,
                    c(0,0.01,0.05,0.1,0.25,0.5,0.75,0.85,0.9,0.95,0.99,1)))
 
 
 # add column with the category of quantile each derivative is in
-df_quantiles$groups <- cut(df_quantiles$derivative,              
-                     breaks = c(-1.579943e+06, -2.342866e+00, -8.822087e-01,
-                                -4.543748e-01, 3.454218e-04, 2.485142e-01,
-                                5.527792e-01, 2.911987e+00, 2.018455e+01, 1.280898e+02,
-                                1.231212e+07, 1.406101e+07),
+df_quantiles$groups <- cut(df_quantiles$.derivative,              
+                     breaks = c(-1.579943e+06, -2.706252e+00, -1.269492e+00,
+                                -3.348207e-01, 1.844665e-03, 2.262231e-01,
+                                9.864616e-01, 2.018455e+01, 3.013806e+01, 1.648215e+06,
+                                1.303406e+07, 1.406101e+07),
                      labels = c("0-1%", "1-5%", "5-10%", "10-25%", "25-50%", "50-75%", "75-85%", "85-90%", "90-95%",
                                 "95-99%", "99-100%"))
 
@@ -870,16 +937,16 @@ plot_percentiles <- df_quantiles |>
   scale_fill_manual(values = c("Cyprinus_carpio" = "#80CDC1",
                                 "Alburnus_arborella" = "#8C510A",
                                 "Barbatula_sp_Lineage_I"="#DFC27D",
-                               "Phoxinus_csikii" = "#01665E", "Salmo_trutta" = "#F46D43"))
+                               "Phoxinus_csikii" = "#01665E",  "Salmo_trutta" = "#F46D43"))
 
 plot_percentiles
 
 # Plot S3a add lines for the percentiles
 plot_percentiles_1 <- plot_percentiles +
-  geom_vline(xintercept = 19.9, color = "red") +
-  annotate("text", x= 18, y = 0.12, label="90th percentile", angle=90) +
-  geom_vline(xintercept = 2.911987e+00, color = "red") +
-  annotate("text", x= 1.5, y = 0.12, label="85th percentile", angle=90) +
+  geom_vline(xintercept = 3.013806e+01, color = "red") +
+  annotate("text", x= 26, y = 0.12, label="90th percentile", angle=90) +
+  geom_vline(xintercept = 2.018455e+01, color = "red") +
+  annotate("text", x= 16, y = 0.12, label="85th percentile", angle=90) +
   theme_classic(base_size = 13) +
   xlab("Mean species derivative per lake") +
   ylab("Percentage") +
@@ -898,7 +965,7 @@ plot_percentiles_1
 
 # above 90% = 2.018455e+01
 df_quantiles |> 
-  filter(derivative > 2.018455e+01) |> 
+  filter(.derivative > 2.018455e+01) |> 
   distinct(species)
 
 # 5 species above 90% -> those will be simplified to binomial 
@@ -916,11 +983,12 @@ data_quantiles <- df_quantiles |>
   distinct(mean_derivative, max_derivative, fLake, species)
 
 # Breaking mean derivatives in the same percentiles as before
+
 data_quantiles$percentiles <- cut(data_quantiles$mean_derivative,              
-                     breaks = c(-1.579943e+06, -2.342866e+00, -8.822087e-01,
-                                -4.543748e-01, 3.454218e-04, 2.485142e-01,
-                                5.527792e-01, 2.911987e+00, 2.018455e+01, 1.280898e+02,
-                                1.231212e+07, 1.406101e+07),
+                     breaks = c(-1.579943e+06, -2.706252e+00, -1.269492e+00,
+                                -3.348207e-01, 1.844665e-03, 2.262231e-01,
+                                9.864616e-01, 2.018455e+01, 3.013806e+01, 1.648215e+06,
+                                1.303406e+07, 1.406101e+07),
                      labels = c("0-1%", "1-5%", "5-10%", "10-25%", "25-50%", "50-75%", "75-85%", "85-90%", "90-95%",
                                 "95-99%", "99-100%"))
 
@@ -969,10 +1037,6 @@ levels(all_deriv$species)
 
 #Calculating response diversity for each lake community
 
-# Lepomis is excluded from the analysis
-all_deriv <- all_deriv |>
-  filter(!species %in% c("Lepomis_gibbosus"))
-
 all_deriv$fLake <- as.character(all_deriv $fLake)
 
 lakes_list <- all_deriv |> 
@@ -993,16 +1057,17 @@ str(all_deriv )
 
 # Loop to get response diversity measures for each lake 
 # loop through list of lakes and calculate response diversity in the lake communities
+
 for (i in lakes_list){
   
   data <- all_deriv |>
-    select(temp, fLake, derivative, species) |> 
+    select(.derivative, temp, species, fLake) |> 
     filter(fLake == i)
  
   df_resp_div <- data |>
     pivot_wider(
       names_from = species,
-      values_from = derivative)
+      values_from = .derivative)
   
   # apply the function from Ross et al. 
   # Dissimilarity
@@ -1013,12 +1078,12 @@ for (i in lakes_list){
   df_resp_div$Med <- median(df_resp_div$rdiv)
   
   # save response diversity metrics per lake
-  saveRDS(df_resp_div, paste0("total_models/lakes_all_models/df_resp_div_", i, ".rds"))
+  saveRDS(df_resp_div, paste0("total_models/resp_div_lakes/df_resp_div_", i, ".rds"))
   
 }
 
 # save the response diversity per lake into one file
-resp_div_no_excl <- list.files(path = "total_models/lakes_all_models", pattern = ".rds", full.names = TRUE) |>
+resp_div_no_excl <- list.files(path = "total_models/resp_div_lakes", pattern = ".rds", full.names = TRUE) |>
   map_dfr(readRDS) |>
   relocate(rdiv, Med, sign, .after = temp)
 
