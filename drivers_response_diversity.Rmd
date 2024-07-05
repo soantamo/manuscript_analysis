@@ -398,7 +398,7 @@ plot_all_lms <- df_all_lms|>
    scale_linetype_manual(values = c("endemic" = "solid",
                                    "non_native" = "dashed",
                                    "non_endemic_native" = "solid",
-                                   "translocated" = "dashed"), labels = c("endemic", "non-native (ns)", "non-endemic native", "translocated (ns)"))
+                                   "translocated" = "dashed"), labels = c("endemic", "non-native", "non-endemic native", "translocated"))
 
 plot_all_lms
 # save as TIFF
