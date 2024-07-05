@@ -219,240 +219,49 @@ categories_supp
 
 ```
 ##Sensitivity testing
+###NEW Fig. S1
 Testing if depth-driven temperature models can adequately fit abundance data compared to a temperature and depth model. 
 
 ```{r}
 temp_only <- readRDS("total_models/df_pred_all.rds") |> 
-  mutate(category = "temp")
+  mutate(model = "temp")
+
 temp_depth <- readRDS("total_models/depth_temp_pred_all.rds") |> 
-  mutate(category = "temp_depth")
+  mutate(model = "temp_depth")
 
-sensitivity
+sensitivity_predictions <- bind_rows(temp_only, temp_depth)
 
-```
-
-
-```{r}
-
-# OLD FIGURE 2
-
-all_predictions <- predictions_categories |>
-  ggplot(aes(temp, fit)) +
-  geom_ribbon(aes(ymin = (fit - se.fit), ymax = (fit + se.fit), fill = factor(species)), alpha = 0.3) +
-  geom_line(aes(color = factor(species))) +
-  theme_bw() +
-  facet_wrap(~species, scale = "free_y", labeller = labeller(species = label_wrap_gen(width = 10))) +
-  theme(strip.background = element_rect(fill = "lightgrey"), strip.text = element_text(size = 6)) +
-  scale_color_viridis(discrete = TRUE, guide = NULL, option = "G", aesthetics = c("color", "fill")) +
-  xlab("Temperature") +
-  ylab("Abundance")
-
-all_predictions
-# save the plot as TIFF
-# tiff(paste("total_models/plots/all_predictions_models.tiff", sep = ""), units="in", width = 12, height=8, res=300)
-# plot(all_predictions)
-# 
-# # Closing the graphical device
-# dev.off()
-```
-
-```{r}
-# Read in abundance and depth data of all species included for modelling
-df_models <- readRDS("df_models.rds")
-
-# find 11 most abundant  species
-species_list <- df_models |> 
-  filter(tot_abu > 300) |> 
-  distinct(Species) |> 
-  pull(Species)
-
-# most abundant species
- # "Alburnus_alburnus", "Coregonus_sp_albeli", "Coregonus_sp","Gasterosteus_aculeatus",
- # "Gobio_gobio", "Leuciscus_leuciscus", "Perca_fluviatilis", "Rutilus_rutilus", 
- # "Sander_lucioperca", "Scardinius_erythrophthalmus","Gymnocephalus_cernua"
-
-# filter df into the most abundant species and select the columns of interest
-
-df_sensitivity <- df_models |> 
-  filter(tot_abu > 300) |> 
-  select(Lake, Species, Protocol, Depth_sample, Abundance, Presence, mean_last_7days) |> 
-  #there are some NAs in depth -> drop them
-  drop_na(Depth_sample, mean_last_7days)
-
-df_sensitivity$fLake <- as.factor(df_sensitivity$Lake)
-df_sensitivity$fProtocol <- as.factor(df_sensitivity$Protocol)
-
-# Loop through the eleven species and fit temp and temp-depth model
-
-species_list <- df_sensitivity |> 
-  distinct(Species) |> 
-  pull(Species)
-
-# loop through the species, model both GAMs, check DHARMa and predictions
-for (i in species_list){
-  
-  data <- df_sensitivity |> 
-    filter(Species == i)
-  
-  #Model fit for temp and depth
-  model1 <- gam(data = data, Abundance ~ s(mean_last_7days, k = 3) + s(Depth_sample, k = 3)
-                + s(fLake, bs = 're')
-                +  s(fProtocol, bs = 're'), family = ziP())
-  # Model fit for temp
-  model2 <- gam(data = data, Abundance ~ s(mean_last_7days, k = 3)
-                + s(fLake, bs = 're')
-                +  s(fProtocol, bs = 're'), family = ziP())
-  # validate model predictions for temp and depth model with dharma:
-  # prepare residuals
-  simulationOutput <- simulateResiduals(fittedModel = model1, plot = F)
-  # tiff_filename <- paste("total_models/gam_check/temp_depth_check_", i, ".tiff", sep = "")
-  # tiff(tiff_filename, width = 800, height = 600)
-  print(plot(simulationOutput))
-  # dev.off()
-  # Plotting standardized residuals against predictors
-  # tiff_file_2 <- paste("total_models/gam_check/temp_depth_predictor_", i, ".tiff", sep = "")
-  # tiff(tiff_file_2, width = 800, height = 600)
-  print(plotResiduals(model1, data$mean_last_7days, xlab = "temp", main=NULL))
-  # dev.off()
-  
-  
-  # for predictions with random effects in the GAMs, we select a random value
-  # of the level of random effects and exclude the random effects in the prediction
-        
-  # lakes where the species is present
-  unique_lakes <- distinct(data, Lake) |>
-    pull()
-  
-  # select random lake for prediction
-  random_lake <- sample(unique_lakes, 1)
-  
-  # for temp-depth model only predict for depth where the species is present
-  presence_depth <- data |> 
-    filter(Presence == 1) |>
-    distinct(Depth_sample) |> 
-    pull(Depth_sample)
-  
-  # take randomly 5 depth values for prediction
-  random_depth <- sort(sample(presence_depth, 5))
-  
-  # Convert sorted values to factors with original order
-  factor_random_depth <- factor(random_depth, levels = random_depth, ordered = TRUE)
-  
-  # grid for each of the models
-  
-  # temp-depth model predicted with random depths where the species is present
- grid1 <- expand.grid(mean_last_7days = seq(
-    from = min(data$mean_last_7days, na.rm = TRUE),
-    to = max(data$mean_last_7days, na.rm = TRUE), length = 200),
-    fProtocol = factor("VERT"), fLake = factor(random_lake), 
-    Depth_sample = factor_random_depth)
-  
-  grid2 <- expand.grid(mean_last_7days = seq(
-    from = min(data$mean_last_7days, na.rm = TRUE),
-    to = max(data$mean_last_7days, na.rm = TRUE), length = 1000),
-    fProtocol = factor("VERT"), fLake = factor(random_lake))
-  
-  # print relevant stats
-  print(paste(i))
-  print(glance(model1))
-  print(glance(model2))
-  
-
-  # manually predict both models
-  model_prediction1 <- predict.gam(model1, newdata = grid1,
-                                  exclude = c("s(fProtocol)", "s(fLake)"), #exclude the re
-                                  term = "s(mean_last_7days)", type = "response",             
-                                  se.fit = TRUE)
-
-  model_bind1 <- cbind(grid1, as.data.frame(model_prediction1)) |>
-    mutate(model = factor("temp_and_depth"))
-
-# predict model2
-  model_prediction2 <- predict.gam(model2, newdata = grid2,
-                                   exclude = c("s(fProtocol)", "s(fLake)"),
-                                   type = "response", se.fit = TRUE)
-
-  model_bind2 <- cbind(grid2, as.data.frame(model_prediction2)) |>
-    mutate(model = factor("temp"))
-
-
-  df_pred <- bind_rows(model_bind1, model_bind2) |>
-    rename(temp = mean_last_7days) |>
-    select(-fProtocol, -fLake) |>
-    mutate(Depth_sample = factor(ifelse(is.na(Depth_sample), "temp", as.character(Depth_sample))))
-
-
-  # Extract numeric depth levels
-  numeric_levels <- levels(df_pred$Depth_sample)[!levels(df_pred$Depth_sample) %in% "temp"]
-
-  # Sort numeric depth levels
-  sorted_numeric_levels <- sort(as.numeric(numeric_levels))
-
-  # Combine sorted numeric levels with "temp" level
-  sorted_levels <- c(as.character(sorted_numeric_levels), "temp")
-
-  # Reorder levels
-  df_pred$Depth_sample <- factor(df_pred$Depth_sample, levels = sorted_levels)
-
-  # Check the levels to confirm they are ordered from lowest to highest
-  levels(df_pred$Depth_sample)
-  
-  # rescale predictions of both models
-  df_pred_rescaled <- df_pred |>
-    group_by(model) |>
-    mutate(fit_rescaled = (fit - min(fit)) / (max(fit) - min(fit))) |>
-    mutate(se_fit_rescaled = (se.fit - min(se.fit)) / (max(se.fit) - min(se.fit))) |> 
-    mutate(species = factor(i))
-  
-  # save predictions of both models in a rds
-   saveRDS(df_pred_rescaled, paste0("total_models/sensitivity/rds/sensitivity_predictions_", i, ".rds"))
-  
-
-}
-
-# prepare total predictions of all models
-sensitivity_predictions <- list.files(path = "total_models/sensitivity/rds", pattern = ".rds", full.names = TRUE) |>
-  map_dfr(readRDS)
-
-# save total predictions as RDS
-saveRDS(sensitivity_predictions, "total_models/sensitivity_predictions.rds")
-
-
-```
-
-###Fig. S1
-
-```{r}
-# read in the sensitivity testing data
-sensitivity_predictions <- readRDS("total_models/sensitivity_predictions.rds")
-
-levels(sensitivity_predictions$species)
-
-# Plot both model predictions together per species
- figure_s1 <- sensitivity_predictions |>
-    ggplot(aes(temp, fit_rescaled, color = model, fill = model)) +
+supplementary_sensitivity <- sensitivity_predictions |>
+    ggplot(aes(temp, fit, color = model, fill = model)) +
     geom_line() +
-    geom_ribbon(aes(ymin = (fit_rescaled - se.fit), ymax = (fit_rescaled + se.fit)), color = NA, alpha = 0.1) +
+    # geom_ribbon(aes(ymin = (fit_rescaled - se.fit), ymax = (fit_rescaled + se.fit)), color = NA, alpha = 0.1) +
     theme_bw() +
     # labs(title = paste("Sensitivity Test", i)) +
-    scale_color_manual(values = c("#08306B", "#D73027"), aesthetics = c("color", "fill")) +
-    facet_wrap(~species, scale = "free") +
+    scale_color_manual(values = c("#D73027", "#08306B"), aesthetics = c("color", "fill")) +
+     facet_wrap(~species, scale = "free", labeller = labeller(species = label_wrap_gen(width = 10))) +
+    theme(strip.background = element_rect(fill = "lightgrey"), strip.text = element_text(size = 6)) +
     ylab("Abundance") +
     xlab("Temperature") +
    theme(panel.grid.major = element_blank(), 
         panel.grid.minor = element_blank(), 
         legend.position = "right",
         legend.title = element_blank()) 
- 
-  figure_s1
-  # save as TIFF
-# tiff(paste("total_models/plots/sensitivity_overview.tiff", sep = ""), units="in", width=11, height=7, res=300)
+
+
+# # save the plot as TIFF
+# tiff(paste("total_models/plots/supplementary_sensitivity_predictions.tiff", sep = ""), units="in", width = 12, height=8, res=300)
+# plot(supplementary_sensitivity)
 # 
-# plot(figure_s1)
-# 
+# # Closing the graphical device
 # dev.off()
 
+
 ```
+####AIC comparison 
+```{r}
+# to be added
+```
+
 #Derivatives calculation 
 
 ##Data preparation
