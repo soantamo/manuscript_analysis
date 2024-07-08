@@ -27,7 +27,7 @@ library(grid)
 library(viridis)
 ```
 
-##Drivers of thermal response diversity
+#Drivers of thermal response diversity
 
 Preparing a df with the information on past eutrophication, species richness, and species categorization in each lake.
 ```{r}
@@ -106,11 +106,8 @@ df_lm$Phos_max <- as.numeric(df_lm$Phos_max)
 
 ```
 
-###Species richness and eutrophication
-Multiple linear regression to calculate the effect of species richness and
-eutrophication on response diversity.
-
-###Fig. 3
+##Fig. 3
+Dissimilarity, species richness and categories
 
 ```{r}
 # Multiple linear regression for mean dissimilarity explained by species richness and past eutrophication: 
@@ -146,6 +143,8 @@ prediction_lm1 <- predict.lm(lm1, newdata = new_data, se.fit = TRUE, type = "res
 bind_model1 <- cbind(new_data, prediction_lm1) |> 
   mutate(category ="color")
 
+mycolor = "black"
+
 # pltting the first linear regression
 lm1_plot <- bind_model1 |> 
   ggplot(aes(sum_species, fit,  color = category, fill = category)) +
@@ -157,6 +156,7 @@ lm1_plot <- bind_model1 |>
   # ylim(1,3) +
   scale_fill_manual(values = mycolor, aesthetics = c("color", "fill"), guide = NULL)
 
+lm1_plot
 # Lms for all categories: endemic, translcated, non_native and non_endemic_native
 # with data on all lakes
 # Endemic
@@ -257,13 +257,14 @@ plot_all_lms <- df_all_lms|>
   xlab("Species richness") +
   scale_fill_manual(values = mycolors,
                     aesthetics = c("color", "fill"),
-                    labels = c("endemic", "non-native (ns)", "non-endemic native", "translocated (ns)")) +
+                    labels = c("endemic", "non-native", "non-endemic native", "translocated")) +
    scale_linetype_manual(values = c("endemic" = "solid",
                                    "non_native" = "dashed",
                                    "non_endemic_native" = "solid",
                                    "translocated" = "dashed"), labels = c("endemic", "non-native", "non-endemic native", "translocated"))
 
 plot_all_lms
+
 # save as TIFF
 # tiff(paste("total_models/plots/lm_all.tiff", sep = ""), units="in", width=11, height=7, res=300)
 # # plot(ggarrange(depth1, depth2, ncol = 2))
@@ -274,11 +275,7 @@ plot_all_lms
 
 ```
 
-###Figure 4
-```{r}
-```
-
-###Figure 3 Divergence
+## Figure 3 Divergence
 
 ```{r}
 
@@ -429,7 +426,7 @@ lm_divergence_all
 # dev.off()
 ```
 
-
+## Figure 4
 ```{r}
 # second lm for maximum phosphorus ~ species richness
 lm2 <- lm(mean_rdiv ~ Phos_max + sum_species, data = df_lm_excl)
@@ -452,19 +449,9 @@ bind_model2 <- cbind(new_data2, prediction_lm2) |>
 
 # Plot Fig. 3
 "#78BE63"
-mycolor <- c("color" = "#78BE63")
+mycolor <- c("color" = "black")
 # mycolor <- c("color" = "#A0E66A")
 "98D47C"
-
-lm1_plot <- bind_model1 |> 
-  ggplot(aes(sum_species, fit,  color = category, fill = category)) +
-  geom_line(linewidth = 1.2) +
-  geom_ribbon(aes(ymin = (fit - se.fit), ymax = (fit + se.fit)),  alpha = 0.3, color = NA) +
-  theme_classic(base_size = 20) +
-  ylab("Mean dissimilarity") +
-  xlab("Species richness") +
-  # ylim(1,3) +
-  scale_fill_manual(values = mycolor, aesthetics = c("color", "fill"), guide = NULL)
 
 lm2_plot <- bind_model2 |> 
   ggplot(aes(Phos_max, fit, color = category, fill = category)) +
@@ -476,10 +463,7 @@ lm2_plot <- bind_model2 |>
   # ylim(1,3) +
   scale_fill_manual(values = mycolor, aesthetics = c("color", "fill"), guide = NULL)
 
-# combine both plots
-figure_3 <- ggarrange(lm1_plot, lm2_plot)
-
-figure_3
+lm2_plot
 # save as TIFF
 # tiff(paste("total_models/plots/lm_species_richness_eutroph.tiff", sep = ""), units="in", width=12, height=5, res=300)
 # 
@@ -490,7 +474,7 @@ figure_3
 
 ```
 
-###Divergence figure 4
+## Figure 4 Divergence
 
 ```{r}
 
@@ -550,7 +534,7 @@ figure_divergence
 
 
 ```
-###Community subgroups
+### OLD CODE Community subgroups
 ####Fig. 4a
 We fitted simple linear models for the number of species in each category and the mean dissimilarity in each lake. 
 ```{r}
