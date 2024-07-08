@@ -953,11 +953,6 @@ predictions_depth_temp <- function(df){
 }
 
 
-subs <- total_models |> 
-  filter(Species == "Cottus_sp_Po")
-df <- subs
-
-i <- "Cottus_sp_Po"
 stats_gamms <- function(df){
   require(broom)
   require(tidyverse)
@@ -984,6 +979,7 @@ stats_gamms <- function(df){
   temp_data <- list()
   summary <- list()
   model_summary <- list()
+  total_summary <- list()
   
   df$fLake <- as.factor(df$Lake)
   
