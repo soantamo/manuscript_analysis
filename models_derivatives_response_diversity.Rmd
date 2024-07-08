@@ -643,67 +643,64 @@ saveRDS(df_deriv, "total_models/df_deriv_all.rds")
 # to get the derivatives before simplifying any model: 
 # copy all other derivatives to a new folder called total_models/derivatives_no_simplification and then run this code. 
 
-# # Model 4: before simplification
-# species_list <- df_abundance_re |>
-#   # no simplification
-#   filter(Species %in% c("Alburnus_arborella", "Barbatula_sp_Lineage_I",
-#                         "Cyprinus_carpio", "Phoxinus_csikii", "Salmo_trutta")) |>
-#   distinct(Species) |> 
-#   pull(Species)
-# 
-# species_list <- sort(species_list)
-# 
-# derivatives <- list()
-# gam_output <- list()
-# model_prediction <- list()
-# 
-# 
-# for (i in species_list) {
-#   
-#   data <- df_abundance_re |> 
-#     filter(Species == i)
-#   
-#   gam_output[[i]] <- gam(data = data, Abundance ~ s(mean_last_7days, k = 3) + s(fLake, bs = 're')
-#                          +  s(fProtocol, bs = 're'), family = ziP())
-#   
-#   lake_data <- species_lake |>
-#     filter(Species == i)
-#   
-#   lake_list <- distinct(lake_data, Lake) |>
-#     pull()
-#   
-#   unique_lakes <- distinct(data, Lake) |> 
-#     pull()
-#   
-#   for (j in lake_list){
-#     
-#     data_lake <- species_lake |>
-#       filter(Species == i) |>
-#       filter(Lake == j)
-#    
-#     random_lake <- sample(unique_lakes, 1)
-# 
-#     newdata <- tibble(mean_last_7days = seq(
-#       from = min(data_lake$temp, na.rm = TRUE),
-#       to = max(data_lake$temp, na.rm = TRUE), length = 200),
-#       fLake = factor(random_lake), fProtocol = factor("VERT"))
-#     
-#     derivatives <- derivatives(gam_output[[i]], data = newdata) |>
-#       mutate(fLake = factor(j)) |>
-#       mutate(species = factor(i)) |>
-#       rename(temp = mean_last_7days)
-#     
-#     saveRDS(derivatives, paste0("total_models/derivatives_no_simplification/derivatives_", i, "_",  j, ".rds"))
-# 
-#   }
-# }
+# Model 4: before simplification
+species_list <- df_abundance_re |>
+# #   # no simplification
+filter(Species %in% c("Alburnus_arborella", "Barbatula_sp_Lineage_I",
+                     "Cyprinus_carpio", "Phoxinus_csikii", "Salmo_trutta")) |>
+distinct(Species) |> 
+pull(Species)
+
+species_list <- sort(species_list)
+
+derivatives <- list()
+gam_output <- list()
+model_prediction <- list()
+
+
+for (i in species_list) {
+ data <- df_abundance_re |> 
+     filter(Species == i)
+ 
+ gam_output[[i]] <- gam(data = data, Abundance ~ s(mean_last_7days, k = 3) + s(fLake, bs = 're') +  s(fProtocol, bs = 're'), family = ziP())
+
+ lake_data <- species_lake |>
+   filter(Species == i)
+ 
+ lake_list <- distinct(lake_data, Lake) |>
+   pull()
+ 
+ unique_lakes <- distinct(data, Lake) |> 
+     pull()
+
+  for (j in lake_list){
+    data_lake <- species_lake |>
+      filter(Species == i) |>
+     filter(Lake == j)
+
+     random_lake <- sample(unique_lakes, 1)
+
+     newdata <- tibble(mean_last_7days = seq(
+       from = min(data_lake$temp, na.rm = TRUE),
+       to = max(data_lake$temp, na.rm = TRUE), length = 200),
+       fLake = factor(random_lake), fProtocol = factor("VERT"))
+
+     derivatives <- derivatives(gam_output[[i]], data = newdata) |>
+       mutate(fLake = factor(j)) |>
+       mutate(species = factor(i)) |>
+       rename(temp = mean_last_7days)
+
+     saveRDS(derivatives, paste0("total_models/derivatives_no_simplification/derivatives_", i, "_",  j, ".rds"))
+
+   }
+ }
 
 # save total derivatives as RDS (no exclusions)
-# 
-# df_deriv_no_excl <- list.files(path = "total_models/derivatives_no_simplification", pattern = ".rds", full.names = TRUE) |>
-#   map_dfr(readRDS)
-# 
-# saveRDS(df_deriv_no_excl, "total_models/df_deriv_all_no_excl.rds")
+#
+df_deriv_no_excl <- list.files(path = "total_models/derivatives_no_simplification", pattern = ".rds", full.names = TRUE) |>
+  map_dfr(readRDS)
+#
+saveRDS(df_deriv_no_excl, "total_models/df_deriv_all_no_excl.rds")
 
 ```
 
