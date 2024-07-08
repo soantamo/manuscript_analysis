@@ -534,7 +534,7 @@ figure_divergence
 
 
 ```
-### OLD CODE Community subgroups
+# OLD CODE Community subgroups
 ####Fig. 4a
 We fitted simple linear models for the number of species in each category and the mean dissimilarity in each lake. 
 ```{r}
