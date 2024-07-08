@@ -738,7 +738,8 @@ df_quantiles$groups <- cut(df_quantiles$.derivative,
                      labels = c("0-1%", "1-5%", "5-10%", "10-25%", "25-50%", "50-75%", "75-85%", "85-90%", "90-95%",
                                 "95-99%", "99-100%"))
 
-# Plot S3a: histogram of species' mean derivatives per lake
+
+#  derivatives per lake
 plot_percentiles <- df_quantiles |> 
   # Salmo trutta derivative is too large to be plotted
   filter(species != "Salmo_trutta") |> 
@@ -748,7 +749,7 @@ plot_percentiles <- df_quantiles |>
   scale_fill_manual(values = c("Cyprinus_carpio" = "#80CDC1",
                                 "Alburnus_arborella" = "#8C510A",
                                 "Barbatula_sp_Lineage_I"="#DFC27D",
-                               "Phoxinus_csikii" = "#01665E",  "Salmo_trutta" = "#F46D43"))
+                               "Phoxinus_csikii" = "#01665E",  "Salmo_trutta" = "#F46D43", "Cottus_sp_Po_profundal" = "red"))
 
 plot_percentiles
 
@@ -766,6 +767,21 @@ plot_percentiles_1 <- plot_percentiles +
   ylim(0, 0.2)
   
 plot_percentiles_1
+
+
+# LOOKING AT MAX DERIVATIVE
+# Plot S3a: histogram of species' mean derivatives per lake
+df_quantiles |> 
+  # Salmo trutta derivative is too large to be plotted
+  filter(species != "Salmo_trutta") |> 
+  ggplot(aes(x = max_derivative, fill = factor(species))) + 
+  geom_histogram(aes(y = after_stat(count / sum(count))), binwidth = 1.5) +
+  scale_y_continuous(labels = scales::percent) +
+  scale_fill_manual(values = c("Cyprinus_carpio" = "#80CDC1",
+                                "Alburnus_arborella" = "#8C510A",
+                                "Barbatula_sp_Lineage_I"="#DFC27D",
+                               "Phoxinus_csikii" = "#01665E",  "Salmo_trutta" = "#F46D43", "Cottus_sp_Po_profundal" = "red"))
+
 
 # save as TIFF
 # tiff(paste("total_models/plots/plot_deriv_percentiles_1.tiff", sep = ""), units="in", width=12, height=6, res=300)
@@ -836,6 +852,20 @@ derivative_percentiles_2 <- mean_deriv_plot +
   theme_classic(base_size = 16)
 
 derivative_percentiles_2
+
+# max derivatives per species in each lake
+max_deriv_plot <- data_quantiles |> 
+  ggplot(aes(fLake, y = fct_reorder(species, max_derivative), fill= percentiles)) + 
+  geom_tile() +
+  scale_fill_manual(breaks = levels(data_quantiles$percentiles),
+                    values = rev(brewer.pal(11, "BrBG")))
+
+
+max_deriv_plot +
+  guides(fill = guide_legend(title = "percentiles (max derivative)", reverse = TRUE)) +
+  xlab("") +
+  ylab("") +
+  theme_classic(base_size = 16)
 
 # save plot as TIFF
 # tiff(paste("total_models/plots/plot_deriv_percentiles_2.tiff", sep = ""), units="in", width=19, height=12, res=300)
