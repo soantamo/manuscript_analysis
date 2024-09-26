@@ -16,15 +16,10 @@ library(viridis)
 ```
 
 #Introduction
-This is the supplementary information of the Master thesis. This document
-covers the whole analysis performed to assess response diversity between fish communities
-in Swiss peri-alpine lakes. 
-This document has two parts: Data preparation (1) and Data analysis (2). 
-Function to model general additive models is provided separately (see function_GAM.R). 
-Code for figures used in the method figure is also provided separately (see supplementary_method_figure.R) 
+Data preparation for analysis.
 
 ```{r}
-# do we want to include zurich and constance separately?
+# read in data
 projet_lac_data <- read.csv("PLDB_final_short_depth_climate_cleantaxa_20052022.csv")
 
 str(projet_lac_data)
