@@ -36,15 +36,15 @@ lake_info <- read_xlsx("lake_info.xlsx")
 
 # select the columns we use
 lake_selection <- lake_info |> 
-  select(Lake, Phos_max, Max_depth, Lake_area)
+  select(Lake, Phos_max, Max_depth, Lake_area, Species_loss, Phos_max_Vonlanthen)
 
 # information about categorization in each lake for the subgroups
 species_endemism <- read_excel("species_category_per_lake.xlsx") |> 
   rename(endemism = detail_category)
 
-# exclude lepomis gibbosus and re-calculate species richness per lake
+# re-calculate species richness per lake
 species_endemism_short <- species_endemism |> 
-  filter(species != "Lepomis_gibbosus") |> 
+  # filter(species != "Lepomis_gibbosus") |> 
   select(-sum_species) |> 
   group_by(fLake) |> 
   mutate(sum_species = sum(num_species))
@@ -103,6 +103,7 @@ str(df_lm)
 
 # phosphorus values as numeric
 df_lm$Phos_max <- as.numeric(df_lm$Phos_max)
+df_lm$Phos_max_Vonlanthen <- as.numeric(df_lm$Phos_max_Vonlanthen)
 
 ```
 
@@ -425,8 +426,48 @@ lm_divergence_all
 # 
 # dev.off()
 ```
+## Figure 4a
+```{r}
+df_lm_4 <- df_lm |> 
+  filter(!Lake %in% c("Poschiavo", "Joux", "Maggiore", "Lugano"))
 
-## Figure 4
+lm_species_loss <- lm(Species_loss ~ Phos_max_Vonlanthen, data = df_lm_4)
+
+# checking model assumptions
+summary(lm_species_loss)
+shapiro.test(resid(lm_species_loss))
+lmtest::bptest(lm_species_loss)
+plot(lm_species_loss)
+
+# new data
+new_data_species_loss <- tibble(Phos_max_Vonlanthen = seq(from = min(df_lm_4$Phos_max_Vonlanthen), to = max(df_lm_4$Vonlanthen), length = 15))
+
+# predict model
+prediction_species_loss <- predict.lm(lm_species_loss, newdata = new_data_species_loss, se.fit = TRUE, type = "response")
+
+# combine new data and predictions
+bind_model_species_loss <- cbind(new_data_species_loss, prediction_species_loss) |> 
+  mutate(category ="color")
+
+# Plot Fig. 3
+"#78BE63"
+mycolor <- c("color" = "black")
+# mycolor <- c("color" = "#A0E66A")
+"98D47C"
+
+bind_model_species_loss|> 
+  ggplot(aes(Phos_max, fit, color = category, fill = category)) +
+  geom_line(linewidth = 1.2) +
+  geom_ribbon(aes(ymin = (fit - se.fit), ymax = (fit + se.fit)),  alpha = 0.3, color = NA) +
+  theme_classic(base_size = 20) +
+  ylab("Species loss") +
+  xlab("Maximum total phosphorus (µg/L)") +
+  # ylim(1,3) +
+  scale_fill_manual(values = mycolor, aesthetics = c("color", "fill"), guide = NULL)
+
+
+```
+## Figure 4b
 ```{r}
 # second lm for maximum phosphorus ~ species richness
 lm2 <- lm(mean_rdiv ~ Phos_max + sum_species, data = df_lm_excl)
@@ -473,6 +514,48 @@ lm2_plot
 # dev.off()
 
 ```
+
+##Figure 4c
+```{r}
+
+lm_test <- lm(mean_rdiv ~ Species_loss, data = df_lm_4)
+
+
+# checking model assumptions
+summary(lm_test)
+# shapiro.test(resid(lm_species_loss))
+# lmtest::bptest(lm_species_loss)
+# plot(lm_species_loss)
+
+# new data
+new_data_test <- tibble(Species_loss = seq(from = min(df_lm_4$Species_loss), to = max(df_lm_4$Species_loss), length = 15))
+
+# predict model
+prediction_test <- predict.lm(lm_test, newdata = new_data_test, se.fit = TRUE, type = "response")
+
+# combine new data and predictions
+bind_model_test <- cbind(new_data_test, prediction_test) |> 
+  mutate(category ="color")
+
+# Plot Fig. 3
+"#78BE63"
+mycolor <- c("color" = "black")
+# mycolor <- c("color" = "#A0E66A")
+"98D47C"
+
+bind_model_test |> 
+  ggplot(aes(Species_loss, fit, color = category, fill = category)) +
+  geom_line(linewidth = 1.2) +
+  geom_ribbon(aes(ymin = (fit - se.fit), ymax = (fit + se.fit)),  alpha = 0.3, color = NA) +
+  theme_classic(base_size = 20) +
+  ylab("Mean dissimilarity") +
+  xlab("Species loss") +
+  # ylim(1,3) +
+  scale_fill_manual(values = mycolor, aesthetics = c("color", "fill"), guide = NULL)
+
+
+```
+
 
 ## Figure 4 Divergence
 
