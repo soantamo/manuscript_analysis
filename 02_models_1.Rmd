@@ -1,0 +1,37 @@
+---
+title: "02_models_1"
+author: "Sophie Moreau"
+date: "2024-09-27"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+#General Additive Models
+Running the predictions for all GAMs with the smaller data frames to reduce running 
+time. 
+
+```{r}
+# packages relevant for data analysis
+library(tidyverse)
+library(here)
+library(readr)
+library(readxl)
+library(gratia)
+library(mgcv)
+library(forcats)
+library(ggpubr)
+library(RColorBrewer)
+library(broom)
+library(grid)
+library(DHARMa)
+library(mgcViz)
+library(gridExtra)
+library(grid)
+library(viridis)
+
+# function for the temperature only GAMs
+source(here("function_GAM.R"))
+
+# function for temp and depth models 
+source(here("function_temp_depth.R"))
+```
