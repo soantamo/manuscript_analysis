@@ -27,6 +27,13 @@ projet_lac_data$LakeBasin <- as.factor(projet_lac_data$LakeBasin)
 
 projet_lac_data |> 
   distinct(LakeBasin)
+
+# create folder needed in the directory
+
+folder_name <- "data_frame_models"
+if (!dir.exists(folder_name)){
+  dir.create(folder_name)}
+
 ```
 
 #1. Data preparation
@@ -212,6 +219,7 @@ saveRDS(df_models, "df_models.rds")
 df_models$Species <- as.factor(df_models$Species)
 levels(df_models$Species)
 
+
 species <- df_models |> 
   group_by(Species) |> 
   summarize(tot_obs = sum(Abundance))
@@ -219,7 +227,7 @@ species <- df_models |>
 ```
 ##Data frames for GAMs
 We compiled four data frames for the four types of general additive models that 
-were run: Species with 1) binomial dataoccurring in one lake,
+were run: Species with 1) binomial data occurring in one lake,
 2) abundance data occurring in one lake, 3) binomial data 
 occuring in multiple lakes, 4) abundance data and occuring in multiple lakes. 
 
