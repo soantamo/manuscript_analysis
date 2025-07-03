@@ -1,0 +1,375 @@
+---
+title: "Calculate derivatives"
+author: "Sophie Moreau, Conor Waldock"
+date: "2024-09-27"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+# packages relevant for data analysis
+pacman::p_load(
+  tidyverse,
+  here,
+  readr,
+  readxl,
+  gratia,
+  mgcv,
+  forcats,
+  ggpubr,
+  RColorBrewer,
+  broom,
+  grid,
+  DHARMa,
+  mgcViz,
+  gridExtra,
+  viridis, 
+  modelsummary,
+  gratia, 
+  broom,
+  tidyverse,
+  DHARMa,
+  mgcv,
+  gratia,
+  mgcViz, 
+  data.table
+)
+
+```
+
+# Calculate values for derivatives across GAMs fits
+
+Here we need to calculate at each temperature that a species is present the values of the derivatives. Here I can first calculate across all valid temperatures in the dataset, and then subset these to the temperature range in which species were observed. 
+
+First step is to read in all the models and temperature predictions - for each prediction we can obtain a derivative value
+
+```{r}
+
+# get all files, read, bind
+all_temp_preds <- bind_rows(lapply(list.files('outputs', pattern = 'temperature_predictions.RDS', recursive = T, full.names = T), readRDS))
+
+all_ffd_derivs <- all_temp_preds %>% 
+  group_by(name, k, including_electro) %>% 
+  filter(colour == 'inside') %>% 
+  mutate(value = scales::rescale(value)) %>% 
+  # estimate next values
+  mutate(value_lead = lead(value), 
+         mean_last_7days_lead = lead(mean_last_7days)) %>% 
+  # remove end point
+  filter(!is.na(value_lead), !is.na(mean_last_7days_lead)) %>% 
+  # forward finite difference
+  mutate(ffd = (value_lead - value) / (mean_last_7days_lead - mean_last_7days), 
+         ffd_per_0.1degree = (ffd*(1/0.2)) * 0.1)
+
+saveRDS(all_ffd_derivs, file = 'data/final_ffd.RDS')
+
+# gam_fits <- list.files('outputs', pattern = 'gam_fits', recursive = T, full.names = T)
+# 
+# x <- gam_fits[1]
+# final_derivs <- lapply(gam_fits, function(x){
+#  
+#   # get the variables 
+#  electro <- grepl('_electro_', x)
+#  k_value      <- str_extract(x, "(?<=k=)\\d+")
+#   
+#  # filter prediction data to the variables of interest
+#  temp_preds <- all_temp_preds %>% 
+#    filter(k==k_value, 
+#           including_electro == electro)
+#  
+#  # read in gam fits
+#  gam_set <- readRDS(x)
+#  
+#  sp <- names(gam_set)[1]
+#  gam_set <- gam_set[-which(is.na(gam_set))]
+#  all_derivs <- lapply(names(gam_set), function(sp){
+#    
+#    print(sp)
+#    # get predictions for given species 
+#    temp_preds_sp <- temp_preds %>% 
+#      filter(name == sp)
+#    
+#    # The derivative approach is complicated by the link funcition and scale of the response
+#    # and the fact this is different between species
+#    # # calculate derivatives for given model given species
+#    # derivs <- gratia::derivatives(object = gam_set[[sp]], 
+#    #                               data = temp_preds_sp %>% select(mean_last_7days, fLake, fProtocol), 
+#    #                               term = "s(mean_last_7days)",
+#    #                               interval = 'confidence', 
+#    #                               partial_match = F) %>% 
+#    #   janitor::clean_names() %>% 
+#    #   rename(se_deriv = se) %>% 
+#    #   select(-mean_last_7days)
+#    
+#    # Easier to simply calculate the forward finite difference from the predictions 
+#    # on a scaled response
+#    
+#    bind_cols(temp_preds_sp, derivs)
+#    
+#    return(bind_cols(temp_preds_sp, derivs))
+#    
+#  })
+#  
+#  names(all_derivs) <- names(gam_set)
+#  
+#  # filter to be only species with valid models
+#  all_derivs_2 <- bind_rows(all_derivs)
+#  
+#  return(all_derivs_2)
+# 
+# })
+# 
+# saveRDS(bind_rows(final_derivs), 'data/final_derivs.RDS')
+
+```
+
+
+# Make plots of response curves coloured by derivatives out of interest
+
+Here I think the derivative method is overly complicated because it depends on the error distribution of the model and requires backtransformation depending on the model link function. Easier to simply take the forward finite difference (difference in abundance predictions based on difference in temperature)
+
+```{r}
+
+# final_derivs <- readRDS('data/final_derivs.RDS')
+# 
+# ggplot(data = final_derivs  %>% 
+#          filter(!grepl('Salvelinus_sp_Pro', name)) %>% 
+#          filter(colour == 'inside', k == 3, data_type == 'no_electro')) + 
+#     geom_point(aes(x = mean_last_7days, y = value, col = log(value) * derivative)) + 
+#   scale_color_gradient2(low = "blue", mid = "gray50", high = "red",
+#                         midpoint = 0, limits = c(-0.5, 0.5), oob = scales::squish) +
+#     facet_wrap(~name, scales = 'free_y') + 
+#     theme_bw() + 
+#     theme(strip.background = element_blank(), 
+#           strip.text = element_text(size = 7))
+
+
+
+```
+
+# use approach on the predictions
+
+```{r}
+
+# get all set of pairs
+full_set <- expand_grid(electro = unique(all_ffd_derivs$including_electro), k = unique(all_ffd_derivs$k))
+
+dir.create('figures/response_curves/', recursive = T)
+
+for(i in 1:nrow(full_set)){
+  print(i / nrow(full_set))
+  electro <- full_set[i,1][[1]]
+  k_selection <- full_set[i,2][[1]]
+  
+  png(paste0('figures/response_curves/', ifelse(electro, 'E', 'noE'), '_', k_selection, '.png'), 
+      res = 300, height = 3000, width = 4000)
+  print(ggplot(data = all_ffd_derivs  %>% 
+                 mutate(row_id = row_number()) %>%
+                 filter(row_id %% 2 == 1) %>%  # keeps every other row, starting with the first
+                 select(-row_id) %>% 
+           filter(k == k_selection, including_electro == electro)) + 
+      geom_point(aes(x = mean_last_7days, y = value, col = ffd_per_0.1degree, pch = colour)) + 
+    scale_color_gradient2(low = "blue", mid = "gray50", high = "red",
+                          midpoint = 0, limits = c(-0.1, 0.1), oob = scales::squish) +
+      facet_wrap(~name, scales = 'free_y') + 
+      theme_bw() + 
+      theme(strip.background = element_blank(), 
+            strip.text = element_text(size = 7)) + 
+    scale_shape_manual(values = c(19,4)))
+  dev.off()
+  
+}
+
+```
+
+
+
+```{r}
+
+source('scripts/functions/functions.R')
+
+# sim
+all_ffd_derivs |>
+  select(mean_last_7days, ffd_per_0.1degree, name)
+
+# preprocess derivatives to only value those which are within the range of the species niche
+# check how many show infinite and NA values
+all_ffd_derivs %>% 
+  group_by(colour) %>% 
+  summarise(across(ffd_per_0.1degree, ~sum(is.infinite(.))))
+
+all_ffd_derivs %>% 
+  group_by(colour) %>% 
+  summarise(across(ffd_per_0.1degree, ~sum(is.na(.))))
+
+# OK it is a tiny fraction of the data (<5%) that show extreme values
+all_ffd_derivs %>% 
+  group_by(colour) %>% 
+  filter(!is.na(ffd_per_0.1degree), !is.infinite(ffd_per_0.1degree)) %>% 
+  summarise(across(ffd_per_0.1degree, ~sum(abs(.) > 0.1))) %>% 
+  mutate(perc_high = ffd_per_0.1degree / nrow(all_ffd_derivs))
+
+# these extremes may greatly bias our interpretations so bring them into boundaries
+all_ffd_derivs %>% 
+  group_by(colour) %>% 
+  filter(!is.na(ffd_per_0.1degree), !is.infinite(ffd_per_0.1degree)) %>% 
+  summarise(across(ffd_per_0.1degree, c(min = min, max = max), na.rm = T))
+
+
+### Bound extreme values
+all_ffd_derivs <- all_ffd_derivs %>% 
+  mutate(ffd_per_0.1degree = case_when(ffd_per_0.1degree < -0.1 ~ -0.1, 
+                                       ffd_per_0.1degree > 0.1 ~ 0.1, 
+                                       T ~ ffd_per_0.1degree))
+
+# need to loop through every lake and the species list per lake
+# species_occ_lakes <- read_csv('data/species_occurrences_lakes_May2025.csv')
+
+species_occ_lakes <-  read_csv("data/taxonomy_May2025/species_lake_list_raw_EDITED.csv") %>% 
+  select(Species_ecotype, Lake, Swisswide_biogeographic_status) %>% 
+  unique() %>%
+  rename(Species = Species_ecotype)
+
+lake <- unique(species_occ_lakes$Lake)[10]
+
+# calculate response diversity
+all_response_div <- lapply(unique(species_occ_lakes$Lake), function(lake){
+  
+  print(lake)
+  
+  # get species present in lakes
+  species_lakes <- species_occ_lakes %>% 
+    filter(Lake == lake) %>% 
+    pull(Species) %>% 
+    unique()
+  
+  # plot response curves per lake and save
+  png(paste0('figures/lake_response_curves/', lake, '.png'), res = 300, width = 3000, height = 3000)
+    print(ggplot(data = all_ffd_derivs  %>% 
+           # filter(!grepl('Salvelinus_sp_Pro', name)) %>% 
+           filter(k != 10, colour == 'inside', 
+                  name %in% species_lakes)) + 
+      geom_line(aes(x = mean_last_7days, y = value, 
+                     col = as.character(k),
+                     lty = including_electro)) + 
+    # scale_color_gradient2(low = "blue", mid = "gray50", high = "red",
+    #                       midpoint = 0, limits = c(-0.1, 0.1), oob = scales::squish) +
+      facet_wrap(~name, scales = 'free_y') + 
+      theme_bw() + 
+      theme(strip.background = element_blank(), 
+            strip.text = element_text(size = 7), 
+            aspect.ratio = 1) + 
+    scale_shape_manual(values = c(19,4)) + 
+    ggtitle(lake))
+  dev.off()
+  
+  # STOP IF THERE ARE MISSING SPECIES IN THE THERMAL RESPONSES - LAKE OVERLAP
+  if(!all(species_lakes%in%all_ffd_derivs$name)){
+    message(paste0('SPECIES MISSING ', print(species_lakes[!species_lakes%in%all_ffd_derivs$name])))
+    # stop()
+    species_lakes <- species_lakes[species_lakes%in%all_ffd_derivs$name]
+  }
+
+  
+  # filter thermal responses to species present in different lakes
+  wide_lake_ffd <- all_ffd_derivs %>% 
+    ungroup() %>% 
+    filter(name %in% species_lakes) %>% 
+    # filter(colour == 'inside') %>% 
+    select(name, mean_last_7days, ffd_per_0.1degree, k, including_electro) %>% 
+    unique() %>% 
+    # pivot to be wider
+    pivot_wider(names_from = name, values_from = ffd_per_0.1degree)
+  
+  # # use function across temperature, k and electro subsets
+  # test <- wide_lake_ffd %>% 
+  #   ungroup() %>% 
+  #   group_by(k, including_electro, mean_last_7days) %>% 
+  #   summarise(response_diversity = resp_div(na.omit(as.numeric(across(species_lakes))), sign_sens = T)) %>% 
+  #   mutate(lake = lake)
+  
+
+  # Convert to data.table
+  setDT(wide_lake_ffd)
+  
+  # Define species columns, assuming 'species_lakes' is a character vector of column names
+  species_cols <- species_lakes
+  
+  # Perform the grouped operation
+  result <- wide_lake_ffd[, .(
+    dissimilarity_ross = resp_div(na.omit(as.numeric(unlist(.SD))), sign_sens = F), 
+    divergence_ross    = resp_div(na.omit(as.numeric(unlist(.SD))), sign_sens = T),
+    mean_ffd = mean(na.omit(as.numeric(unlist(.SD)))),
+    sd_ffd = sd(na.omit(as.numeric(unlist(.SD))))
+  ), 
+  by = .(k, including_electro, mean_last_7days), 
+  .SDcols = species_cols]
+  
+  # If you need to add a lake column (assuming it's already in the original data)
+  result[, lake := lake]
+  
+  return(result)
+
+})
+
+# bind output
+all_response_div <- bind_rows(all_response_div)
+all_response_div <- as_tibble(all_response_div)
+
+```
+
+# Plot ffd against T
+```{r}
+
+all_ffd_derivs_new <- readRDS(file = 'data/final_ffd.RDS')
+
+library(plotly)
+ggplot(data = all_ffd_derivs_new %>% 
+         filter(name != 'Salvelinus_sp_Profundal') %>% 
+         mutate(ffd_per_0.1degree = case_when(ffd_per_0.1degree < -0.5 ~ -0.5, 
+                                              ffd_per_0.1degree > 0.5 ~ 0.5, 
+                                              T ~ ffd_per_0.1degree)) %>% 
+         filter(k == 3, including_electro == TRUE) %>% 
+         group_by(name) %>% 
+         mutate(ffd_per_0.1degree = scales::rescale(ffd_per_0.1degree))) + 
+  geom_line(aes(x = mean_last_7days, y = ffd_per_0.1degree, col = name)) + 
+  theme_bw() + 
+  theme(legend.position = 'none')
+
+?ggplotly
+
+ggplotly(layerData = 'name')
+
+```
+
+# Limit lakes to their thermal range
+Here each lake does not have the same thermal environment. This means we want to avoid making predictions of species response diversity when the thermal environment is not available in the lake gradient during our sampling period.
+
+```{r}
+
+lake_limits <- readRDS('data/df_models_final_ELECTRO.rds') %>% 
+  group_by(Lake) %>% 
+  summarise(across(mean_last_7days, c(min = min, max = max), na.rm = T)) %>% 
+  rename(lake_limit_min = mean_last_7days_min, 
+         lake_limit_max = mean_last_7days_max,
+         lake = Lake)
+
+# filter response diversity estimates to lake limits
+all_response_div <- left_join(all_response_div, 
+          lake_limits) %>% 
+  filter(mean_last_7days > lake_limit_min & mean_last_7days < lake_limit_max)
+
+
+saveRDS(all_response_div, 'data/response_diversity.rds')
+
+```
+
+
+
+

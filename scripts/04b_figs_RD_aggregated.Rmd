@@ -1,0 +1,361 @@
+---
+title: ""
+output: html_document
+date: "`r Sys.Date()`"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+# packages relevant for data analysis
+pacman::p_load(
+  tidyverse,
+  here,
+  readr,
+  readxl,
+  gratia,
+  mgcv,
+  forcats,
+  ggpubr,
+  RColorBrewer,
+  broom,
+  grid,
+  DHARMa,
+  mgcViz,
+  gridExtra,
+  viridis, 
+  modelsummary,
+  gratia, 
+  broom,
+  tidyverse,
+  DHARMa,
+  mgcv,
+  gratia,
+  mgcViz, 
+  data.table
+)
+
+```
+# Plot response diversity across temperature in each lake
+Here we want to visulaise the disimilarity in responses amongst species for each lake
+
+```{r}
+
+all_response_div <- readRDS('data/response_diversity.rds')
+
+
+dir.create('figures/response_diversity_summaries/')
+
+
+# dissimilarity
+png('figures/response_diversity_summaries/dissimilarity_lakes_facet.png', res = 300, width = 3000, height = 3000)
+ggplot(data = all_response_div) + 
+  geom_line(aes(x = mean_last_7days, y = dissimilarity_ross, colour = including_electro), alpha = 0.5) + 
+  facet_wrap(~lake) + 
+  theme_bw() + 
+  ylab('Response dissimilarity') + 
+  xlab('Temperature') + 
+  scale_colour_discrete('with electrofishing')
+dev.off()
+
+ggplot(data = all_response_div %>% 
+         filter(including_electro == T, k == 3)) + 
+  geom_line(aes(x = mean_last_7days, y = dissimilarity_ross, colour = as.character(k))) + 
+  facet_wrap(~lake, scales = 'free')
+
+
+# divergence
+png('figures/response_diversity_summaries/divergence_lakes_facet.png', res = 300, width = 3000, height = 3000)
+ggplot(data = all_response_div ) + 
+  geom_line(aes(x = mean_last_7days, y = divergence_ross, colour = including_electro), alpha = 0.5) + 
+  facet_wrap(~lake, scales = 'free') + 
+  theme_bw() + 
+  ylab('Response divergence') + 
+  xlab('Temperature') + 
+  scale_colour_discrete('with electrofishing')
+dev.off()
+
+ggplot(data = all_response_div %>% 
+         filter(including_electro == T)) + 
+  geom_line(aes(x = mean_last_7days, y = divergence_ross, colour = as.character(k))) + 
+  facet_wrap(~lake, scales = 'free')
+
+ggplot(data = all_response_div %>% 
+         filter(including_electro == T, k == 3)) + 
+  stat_smooth(aes(x = mean_last_7days, y = divergence_ross, colour = as.character(lake))) 
+
+
+# sd
+png('figures/response_diversity_summaries/sd_ffd_lakes_facet.png', res = 300, width = 3000, height = 3000)
+ggplot(data = all_response_div) + 
+  geom_line(aes(x = mean_last_7days, y = sd_ffd, colour = including_electro), alpha = 0.5) + 
+  facet_wrap(~lake, scales = 'free') + 
+  theme_bw() + 
+  ylab('Response SD') + 
+  xlab('Temperature') + 
+  scale_colour_discrete('with electrofishing')
+dev.off()
+
+ggplot(data = all_response_div %>% 
+         filter(including_electro == T, k == 3)) + 
+  geom_line(aes(x = mean_last_7days, y = sd_ffd, colour = as.character(lake))) #+ 
+  #facet_wrap(~lake)
+
+ggplot(data = all_response_div %>% 
+         filter(including_electro == T, k == 3)) + 
+  stat_smooth(aes(x = mean_last_7days, y = sd_ffd, colour = as.character(lake))) #+ 
+
+ggplot(data = all_response_div %>% 
+         filter(including_electro == T, k == 3)) + 
+  geom_point(aes(x = mean_last_7days, y = sd_ffd, colour = as.character(lake))) #+ 
+
+
+# mean
+png('figures/response_diversity_summaries/mean_ffd_lakes_facet.png', res = 300, width = 3000, height = 3000)
+ggplot(data = all_response_div) + 
+  geom_line(aes(x = mean_last_7days, y = mean_ffd, colour = including_electro), alpha = 0.5) + 
+  facet_wrap(~lake, scales = 'free') + 
+  theme_bw() + 
+  ylab('Response SD') + 
+  xlab('Temperature') + 
+  scale_colour_discrete('with electrofishing')
+dev.off()
+
+ggplot(data = all_response_div %>% 
+         filter(including_electro == T, k == 3) %>% 
+         arrange(mean_last_7days)) + 
+  geom_line(aes(x = mean_last_7days, y = mean_ffd, colour = as.character(lake))) + 
+ # facet_wrap(~lake, scales = 'free') + 
+  geom_hline(aes(yintercept = 0)) + 
+  scale_y_continuous(limits = c(-0.1, 0.1))
+
+```
+
+
+
+```{r}
+
+# Dissimilarity
+diss_plot <- ggplot(data = all_response_div %>% 
+         filter(k == 3, including_electro == T)) +
+  stat_smooth(aes(x = mean_last_7days, y = dissimilarity_ross, colour = as.character(lake), 
+                lty = including_electro), se = F, lwd = 0.5)  + 
+  stat_smooth(aes(x = mean_last_7days, y = dissimilarity_ross, 
+                lty = including_electro), se = F, col = 'black', lwd = 2) + 
+  theme_bw()+ 
+  theme(legend.position = "none", 
+        aspect.ratio = 1, 
+        panel.grid = element_blank()) + 
+  xlab('Temperature') + 
+  ylab('Response dissimilarity')
+
+# Divergence
+div_plot <- ggplot(data = all_response_div %>% 
+         filter(k == 3, including_electro == T)) +
+  stat_smooth(aes(x = mean_last_7days, y = divergence_ross, colour = as.character(lake), 
+                lty = including_electro), se = F, lwd = 0.5)  + 
+  stat_smooth(aes(x = mean_last_7days, y = divergence_ross, 
+                lty = including_electro), se = F, col = 'black', lwd = 2) + 
+  theme_bw()+ 
+  theme(legend.position = "none", 
+        aspect.ratio = 1, 
+        panel.grid = element_blank()) +
+  xlab('Temperature') + 
+  ylab('Response divergence')
+
+# SD derivs
+sd_plot <- ggplot(data = all_response_div %>% 
+         filter(k == 3, including_electro == T)) +
+  stat_smooth(aes(x = mean_last_7days, y = sd_ffd, colour = as.character(lake), 
+                lty = including_electro), se = F, lwd = 0.5)  + 
+  stat_smooth(aes(x = mean_last_7days, y = sd_ffd, 
+                lty = including_electro), se = F, col = 'black', lwd = 2) + 
+  theme_bw()+ 
+  theme(legend.position = "none", 
+        aspect.ratio = 1, 
+        panel.grid = element_blank()) + 
+    xlab('Temperature') + 
+  ylab('Response SD')
+
+
+
+# Mean derivs
+mean_plot <- ggplot(data = all_response_div %>% 
+         filter(k == 3, including_electro == T)) +
+  stat_smooth(aes(x = mean_last_7days, y = mean_ffd, colour = as.character(lake), 
+                lty = including_electro), se = F, lwd = 0.5)  + 
+  stat_smooth(aes(x = mean_last_7days, y = mean_ffd, 
+                lty = including_electro), se = F, col = 'black', lwd = 2) + 
+  theme_bw() + 
+  geom_hline(aes(yintercept = 0)) + 
+  theme(legend.position = "none", 
+        aspect.ratio = 1, 
+        panel.grid = element_blank()) + 
+  xlab('Temperature') + 
+  ylab('Response mean')
+
+
+library(cowplot)
+
+dir.create('figures/response_diversity_summaries/')
+png('figures/response_diversity_summaries/all_responses.png', res = 300, width = 3000, height = 1500)
+cowplot::plot_grid(diss_plot, sd_plot, div_plot, mean_plot, ncol = 1)
+dev.off()
+
+```
+
+
+# Plots of average response diversity across whole lake
+
+```{r}
+
+# match response diversity information with lake
+final_rd <- all_response_div %>% 
+  filter(k == 3, including_electro == T)
+
+
+# Aggregate the 'final_rd' data frame for each response diversity metric by 'lake'
+rd_aggregate <- final_rd %>% 
+  # Group the data by the 'lake' column
+  group_by(lake) %>% 
+  # For all columns from 'dissimilarity_ross' to 'sd_ffd', compute the mean
+  # 'na.rm = T' ensures that NA values are ignored during the mean calculation
+  summarise(across(dissimilarity_ross:sd_ffd, mean, na.rm = T)) %>% 
+  # Join the summarised data with the 'result' data frame using a left join
+  left_join(result)
+
+
+# generalized function to plot variables by choice
+plot_lake_relationship <- function(data, xvar, yvar) {
+
+ browser()
+ COR <- cor.test(y = data[[yvar]], x = data[[xvar]], method = 'spearman')
+ COR$p.value
+ print(COR)
+
+  ggplot(data = data) + 
+    stat_smooth(aes(x = .data[[xvar]], y = .data[[yvar]]), 
+                method = 'lm', alpha = 0.5, col = 'gray20', fill = 'gray80', 
+                lty = case_when(COR$p.value < 0.05 ~ 1, T ~ 2),
+                se = case_when(COR$p.value < 0.05 ~ T, T ~ F)) + 
+    geom_text_repel(aes(x = .data[[xvar]], y = .data[[yvar]], label = lake, col = lake), max.overlaps = 5) + 
+    geom_point(aes(x = .data[[xvar]], y = .data[[yvar]], col = lake)) + 
+    geom_label("label",
+           x = min(data[[xvar]], na.rm = TRUE),
+           y = max(data[[yvar]], na.rm = TRUE),
+           label = bquote(rho == .(round(as.numeric(COR$estimate), 2))),
+           fill = "white")  +
+    theme_bw() + 
+    theme(
+      aspect.ratio = 1, 
+      panel.grid = element_blank(),
+      legend.position = 'none'
+    )
+}
+
+
+# plots for lake richness
+rich_diss    <- plot_lake_relationship(rd_aggregate, 'lake_richness', 'dissimilarity_ross') + ylab('Response dissimilarity') + xlab('Species richness') 
+rich_div     <- plot_lake_relationship(rd_aggregate, 'lake_richness', 'divergence_ross') + ylab('Response divergence') + xlab('Species richness') 
+rich_sdffd   <- plot_lake_relationship(rd_aggregate, 'lake_richness', 'sd_ffd') + ylab('Response SD') + xlab('Species richness') 
+rich_meanffd <- plot_lake_relationship(rd_aggregate, 'lake_richness', 'mean_ffd') + ylab('Response mean') + xlab('Species richness') 
+png('figures/response_diversity_summaries/richness_wholeLake.png', res = 300, width = 4000, height = 3000)
+print(plot_grid(rich_diss, 
+                rich_div, 
+                rich_sdffd, 
+                rich_meanffd, nrow = 2, ncol = 2))
+dev.off()
+
+```
+
+# combine together aggregated richness with across-gradient plot
+```{r}
+
+png('figures/response_diversity_summaries/temp_richness_wholeLake.png', res = 600, width = 4000, height = 8000)
+plot_grid(rich_diss, 
+          rich_sdffd,
+          rich_div, 
+          rich_meanffd, ncol = 1) |
+plot_grid(diss_plot + ylab('   '),
+          sd_plot+ ylab('   '), 
+          div_plot+ ylab('   '),
+          mean_plot+ ylab('   '), ncol = 1) + 
+plot_layout(guides = "collect")
+dev.off()
+
+
+```
+
+
+# Maybe moving windows of 2 degrees are more intuitive
+
+```{r}
+
+all_response_div_round <- all_response_div %>% 
+  mutate(mean_last_7days = round(mean_last_7days)) %>% 
+  group_by(mean_last_7days, k, including_electro, lake) %>% 
+  mutate(across(dissimilarity_ross:sd_ffd, mean)) %>% 
+  unique()
+
+```
+
+# Plot running mean metrics for easier visualisation
+
+```{r}
+
+
+# dissimilarity
+ggplot(data = all_response_div_round %>% 
+         filter(k == 3)) + 
+  stat_smooth(aes(x = mean_last_7days, y = dissimilarity_ross, 
+                  colour = as.character(including_electro))) + 
+  facet_wrap(~lake)
+
+ggplot(data = all_response_div_round %>% 
+         filter(including_electro == T, k == 3)) + 
+    geom_point(aes(x = mean_last_7days, y = dissimilarity_ross)) +
+  stat_smooth(aes(x = mean_last_7days, y = dissimilarity_ross, colour = as.character(lake)), se = F) 
+
+
+# divergence
+ggplot(data = all_response_div_round %>% 
+         filter(k == 3)) + 
+  stat_smooth(aes(x = mean_last_7days, y = divergence_ross, colour = including_electro)) + 
+  facet_wrap(~lake, scales = 'free')
+
+ggplot(data = all_response_div_round %>% 
+         filter(including_electro == T, k != 10)) + 
+  stat_smooth(aes(x = mean_last_7days, y = divergence_ross, colour = as.character(k))) + 
+  facet_wrap(~lake, scales = 'free')
+
+
+# sd
+ggplot(data = all_response_div_round %>% 
+         filter(k == 3)) + 
+  stat_smooth(aes(x = mean_last_7days, y = sd_ffd, colour = including_electro)) + 
+  facet_wrap(~lake)
+
+# mean
+ggplot(data = all_response_div_round %>% 
+         filter(k == 3)) + 
+  geom_line(aes(x = mean_last_7days, y = mean_ffd, colour = including_electro)) + 
+  facet_wrap(~lake, scales = 'free')
+
+ggplot(data = all_response_div_round %>% 
+         filter(!k%in%c(2, 10))) +
+  geom_line(aes(x = mean_last_7days, y = mean_ffd, colour = as.character(k), 
+                lty = including_electro)) + 
+  facet_wrap(~lake, scales = 'free') + 
+  geom_hline(aes(yintercept = 0))
+
+
+```
+
+
+

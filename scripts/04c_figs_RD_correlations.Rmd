@@ -1,0 +1,637 @@
+---
+title: "04_model_RD"
+output:
+  html_document:
+    css: styles.css
+date: "`r Sys.Date()`"
+author: "Sophie Moreau, Conor Waldock"
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r, echo = F}
+knitr::opts_chunk$set(echo = TRUE)
+
+# packages relevant for data analysis
+pacman::p_load(
+  tidyverse,
+  here,
+  readr,
+  readxl,
+  gratia,
+  mgcv,
+  forcats,
+  ggpubr,
+  RColorBrewer,
+  broom,
+  grid,
+  DHARMa,
+  mgcViz,
+  gridExtra,
+  viridis, 
+  modelsummary,
+  gratia, 
+  broom,
+  tidyverse,
+  DHARMa,
+  mgcv,
+  gratia,
+  mgcViz, 
+  ggrepel, 
+  rlang, 
+  cowplot, 
+  patchwork
+)
+
+```
+
+# Fit models explaining variation in response diversity based on lake properties
+
+We aim to answer:
+
+1.  Is there a association between species richness per lake on response diversity?
+
+2.  Is there an association between species richness of different biogeographic groups on response diversity, does the strength of this association differ between groups?
+
+3.  Is there an effect of lake eutrophical status on response diversity?
+
+```{r}
+
+# read in response diversity data
+all_response_div <- readRDS('data/response_diversity.rds')
+
+# match response diversity information with lake
+final_rd <- all_response_div %>% 
+  filter(k == 3, including_electro == T)
+
+# lake metadata
+lake_meta <- read_xlsx('data/lake_info.xlsx') %>% 
+  select(Lake, Drainage, Altitude, Lake_area, Lake_volume, Max_depth, contains('Phos_')) %>% 
+  janitor::clean_names() %>% 
+  mutate(across(contains('phos_'), as.numeric)) %>% 
+  mutate(lake = case_when(lake %in% c('ConstanceObersee', 'ConstanceUntersee') ~ 'Constance',
+                          lake %in% c('ZurichObersee', 'ZurichUntersee') ~ 'Zurich',
+                          T ~ lake))
+
+# summarise where no information in subbasin
+lake_meta <- lake_meta %>% 
+  group_by(lake) %>% 
+  summarise(across(is.numeric, max, na.rm = T)) 
+
+
+# information about categorization in each lake for the subgroups per lake
+# get per lake biogeographic affinity
+biogeography_swisswide <- read_csv("data/taxonomy_May2025/species_lake_list_raw_EDITED.csv") %>% 
+  select(Species_ecotype, Lake, Swisswide_biogeographic_status, Lake_biogeographic_status) %>% 
+  rename(lake = Lake, sbs = Swisswide_biogeographic_status, lbs = Lake_biogeographic_status) %>% 
+  unique() %>% 
+  filter(lbs != 'remove') %>% 
+  mutate(lbs_intro = case_when(sbs == 'native' & lbs == 'non_native' ~ 'native_intro', 
+                               sbs == 'endemic' & lbs == 'non_native' ~ 'endemic_intro', 
+                               T ~ lbs))
+
+# biogeography_swisswide %>% print(n = 500)
+
+# lake richness
+lake_richness <- biogeography_swisswide %>% 
+  group_by(lake) %>% 
+  summarise(lake_richness = n_distinct(Species_ecotype))
+
+# group richness
+group_richness <- biogeography_swisswide %>% 
+  group_by(lake, lbs_intro) %>% 
+  summarise(lake_richness = n_distinct(Species_ecotype)) %>% 
+  pivot_wider(values_from = lake_richness, names_from = lbs_intro, values_fill = 0) %>% 
+  ungroup()
+  
+
+
+# join lake and group richness to response diversity data
+result <- reduce(list(lake_meta, lake_richness, group_richness), ~ left_join(.x, .y, by = "lake"))
+
+```
+
+# Average response diversity per lake
+
+Here I aggregate the response diversity across the whole temperature profile of the lake. This mixes the response diversity of the deeper waters and shallower waters in ways that may be difficult to interpret. Later we will not aggregate the data in this way but instead seperate out the include across all lakes.
+
+```{r}
+
+# Aggregate the 'final_rd' data frame for each response diversity metric by 'lake'
+rd_aggregate <- final_rd %>% 
+  # Group the data by the 'lake' column
+  group_by(lake) %>% 
+  # For all columns from 'dissimilarity_ross' to 'sd_ffd', compute the mean
+  # 'na.rm = T' ensures that NA values are ignored during the mean calculation
+  summarise(across(dissimilarity_ross:sd_ffd, mean, na.rm = T)) %>% 
+  # Join the summarised data with the 'result' data frame using a left join
+  left_join(result)
+
+
+# generalized function to plot variables by choice
+plot_lake_relationship <- function(data, xvar, yvar) {
+  ggplot(data = data) + 
+    stat_smooth(aes(x = {{ xvar }}, y = {{ yvar }}), 
+                method = 'lm', alpha = 0.5, col = 'gray20', fill = 'gray80') + 
+    geom_text_repel(aes(x = {{ xvar }}, y = {{ yvar }}, label = lake)) + 
+    geom_point(aes(x = {{ xvar }}, y = {{ yvar }}, col = lake)) + 
+    theme_bw() + 
+    theme(
+      aspect.ratio = 1, 
+      panel.grid = element_blank(),
+      legend.position = 'none'
+    )
+}
+
+# plot but split across endemic groupings
+plot_lake_relationship_endemic <- function(data, xvar, yvar, grouping) {
+  ggplot(data = data) + 
+    stat_smooth(aes(x = {{ xvar }}, y = {{ yvar }}, group = {{ grouping }}, colour = {{grouping}}), 
+                method = 'lm', alpha = 0.5, fill = 'gray80') + 
+    # geom_text_repel(aes(x = {{ xvar }}, y = {{ yvar }}, label = lake)) + 
+    geom_point(aes(x = {{ xvar }}, y = {{ yvar }}, colour = {{grouping}})) + 
+    theme_bw() + 
+    theme(
+      aspect.ratio = 1, 
+      panel.grid = element_blank()
+    )
+}
+
+# plots for lake richness
+rich_diss    <- plot_lake_relationship(rd_aggregate, lake_richness, dissimilarity_ross) + ylab('Response Dissimilarity') + xlab('Species richness') 
+rich_div     <- plot_lake_relationship(rd_aggregate, lake_richness, divergence_ross) + ylab('Response Divergence') + xlab('Species richness') 
+rich_sdffd   <- plot_lake_relationship(rd_aggregate, lake_richness, sd_ffd) + ylab('Response SD') + xlab('Species richness') 
+rich_meanffd <- plot_lake_relationship(rd_aggregate, lake_richness, mean_ffd) + ylab('Response Mean') + xlab('Species richness') 
+png('figures/response_diversity_summaries/richness_wholeLake.png', res = 300, width = 4000, height = 3000)
+print(plot_grid(rich_diss, rich_div, rich_sdffd, rich_meanffd, nrow = 2, ncol = 2))
+dev.off()
+
+# plots for endemic richness
+rd_aggregate_class <- rd_aggregate %>% pivot_longer(cols = endemic:non_native, names_to = 'biogeographic_class', values_to = 'richness_bioclass')
+endm_diss    <- plot_lake_relationship_endemic(rd_aggregate_class, richness_bioclass, dissimilarity_ross, biogeographic_class)
+endm_div     <- plot_lake_relationship_endemic(rd_aggregate_class, richness_bioclass, divergence_ross, biogeographic_class)
+endm_sdffd   <- plot_lake_relationship_endemic(rd_aggregate_class, richness_bioclass, sd_ffd, biogeographic_class)
+endm_meanffd <- plot_lake_relationship_endemic(rd_aggregate_class, richness_bioclass, mean_ffd, biogeographic_class)
+png('figures/response_diversity_summaries/endemic_richness_wholeLake.png', res = 300, width = 4000, height = 3000)
+plot_grid(endm_diss, endm_div, endm_sdffd, endm_meanffd, nrow = 2, ncol = 2)
+dev.off()
+
+
+rd_aggregate_class <- rd_aggregate %>% pivot_longer(cols = endemic:non_native, names_to = 'biogeographic_class', values_to = 'richness_bioclass')
+endm_diss    <- plot_lake_relationship_endemic(rd_aggregate_class %>% filter(biogeographic_class %in% c('endemic', 'native')), richness_bioclass, dissimilarity_ross, biogeographic_class)
+endm_div     <- plot_lake_relationship_endemic(rd_aggregate_class %>% filter(biogeographic_class %in% c('endemic', 'native')), richness_bioclass, divergence_ross, biogeographic_class)
+endm_sdffd   <- plot_lake_relationship_endemic(rd_aggregate_class %>% filter(biogeographic_class %in% c('endemic', 'native')), richness_bioclass, sd_ffd, biogeographic_class)
+endm_meanffd <- plot_lake_relationship_endemic(rd_aggregate_class %>% filter(biogeographic_class %in% c('endemic', 'native')), richness_bioclass, mean_ffd, biogeographic_class)
+png('figures/response_diversity_summaries/endemic_richness_v2_wholeLake.png', res = 300, width = 4000, height = 3000)
+plot_grid(endm_diss, endm_div, endm_sdffd, endm_meanffd, nrow = 2, ncol = 2)
+dev.off()
+
+
+```
+
+### Using spearmans rank correlation to test simple relationships between variables
+
+In this analysis we have very few degrees of freedom and only 16 lakes. Fitting models with interaction terms is not likely to be revealing. Instead we can see if the correlations are similar amongst different groups and compare the group richness this way. This is likely more conservative to avoid falsely rejecting hypothesis that may be difficult to test with more sophisticated interaction terms.
+
+```{r}
+
+# Define independent (x) and dependent (y) variables
+independent_vars <- c("dissimilarity_ross", "divergence_ross", "sd_ffd", "mean_ffd")  # Add more as needed
+dependent_vars <- c("lake_richness", "endemic_intro", "endemic", "native", "native_intro", "non_native", "phos_max")
+
+# Initialize an empty list to store results
+all_cor_results <- list()
+
+# Nested loop: outer for independent vars, inner for dependent vars
+for (x_var in independent_vars) {
+  for (y_var in dependent_vars) {
+    # Perform correlation test
+    test <- cor.test(rd_aggregate[[x_var]], rd_aggregate[[y_var]], method = 'spearman')
+    
+    # Store results
+    all_cor_results[[paste(x_var, y_var, sep = "_vs_")]] <- data.frame(
+      x_var = x_var,
+      y_var = y_var,
+      spearmans_rank = round(test$estimate, 2),
+      p_value = round(test$p.value,3)
+    )
+  }
+}
+
+# Combine all results into a single summary data frame
+cor_summary_table <- do.call(rbind, all_cor_results)
+rownames(cor_summary_table) <- NULL
+
+# View the summary table
+print(cor_summary_table)
+
+```
+
+## Assessing response diversity across thermal gradients
+
+Next we wish to aggregate response diversity metrics at different temperature bands across the lakes and test for the strength of these relationships. Here we will plot the response diversity with richness relationships across each lake for each temperature bin. I have binned the tempeatures to 5 degree windows (defined by the nearest 5 degree interval (e.g., 2.5 - 7.5 = 5, 7.5 - 12.5 = 10 etc.) and mean-averaged the response diversity values.
+
+```{r}
+
+# Here we want to aggregate by temperature bins
+rd_aggregate_tb <- final_rd %>% 
+  # Create temperature bins 
+  mutate(temp_bin = paste0('temp_', sprintf("%02d", plyr::round_any(mean_last_7days, accuracy = 5)))) %>% 
+  # Group the data by the 'lake' column
+  group_by(lake, temp_bin) %>% 
+  # For all columns from 'dissimilarity_ross' to 'sd_ffd', compute the mean
+  # 'na.rm = T' ensures that NA values are ignored during the mean calculation
+  summarise(across(dissimilarity_ross:sd_ffd, mean, na.rm = T)) %>% 
+  # Join the summarised data with the 'result' data frame using a left join
+  left_join(result)
+
+# Temp 25 only has zug and maggiore so remove
+rd_aggregate_tb <- rd_aggregate_tb %>% filter(temp_bin != 'temp_25')
+
+# Define the variables to use instead of `lake_richness`
+richness_vars <- c("lake_richness", "endemic", "native", "endemic_intro", "native_intro", "non_native")  
+dissimilarity_vars <- c("dissimilarity_ross", "divergence_ross", "sd_ffd", "mean_ffd")     
+
+
+# update function to remove text
+plot_lake_relationship <- function(data, xvar, yvar) {
+  ggplot(data = data) + 
+    stat_smooth(aes(x = {{ xvar }}, y = {{ yvar }}), 
+                method = 'lm', alpha = 0.5, col = 'gray20', fill = 'gray80') + 
+    #geom_text_repel(aes(x = {{ xvar }}, y = {{ yvar }}, label = lake)) + 
+    geom_point(aes(x = {{ xvar }}, y = {{ yvar }}, col = lake)) + 
+    theme_bw() + 
+    theme(
+      aspect.ratio = 1, 
+      panel.grid = element_blank(),
+      legend.position = 'none'
+    )
+}
+
+
+# Generate all plots
+# Generate all plots
+# Generate all plots
+all_plots <- map(dissimilarity_vars, function(diss_var) {
+  diss_sym <- sym(diss_var)  # convert y-axis var to symbol
+
+  # Loop over each richness (x-axis) variable
+  map(richness_vars, function(rich_var) {
+    rich_sym <- sym(rich_var)  # convert x-axis var to symbol
+
+    # Loop over temp bins to create individual plots
+    plots <- map(unique(rd_aggregate_tb$temp_bin), function(temp_bin_val) {
+      data_filtered <- rd_aggregate_tb %>% filter(temp_bin == temp_bin_val)
+
+      plot_lake_relationship(data_filtered, !!rich_sym, !!diss_sym) +
+        ggtitle(temp_bin_val) + 
+        theme(text = element_text(size = 5))
+    })
+
+    # Combine plots for one richness/dissimilarity combo
+    wrap_plots(plots, nrow = 1) + plot_annotation(title = diss_sym)
+
+  })
+}) %>% flatten()  # flatten from nested lists into a single list
+
+print(all_plots)
+```
+
+
+## Convert the observed results into a publication quality figure 
+Lets have a big multiplanel figure for fun
+
+```{r}
+rd_corvalues <- rd_aggregate_tb %>% 
+  dplyr::filter(lake != 'Poschiavo') %>% 
+  pivot_longer(cols = c(phos_max, lake_richness:non_native), names_to = "richness_type", values_to = "richness_value") %>% 
+  pivot_longer(cols = dissimilarity_ross:sd_ffd, names_to = "dissimilarity_type", values_to = "diss_value") %>% 
+  group_by(temp_bin, richness_type, dissimilarity_type) %>% 
+  summarise(
+    cor_result = list(cor.test(diss_value, richness_value)),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    estimate = map_dbl(cor_result, ~ round(.x$estimate, 2)),
+    p_value = map_dbl(cor_result, ~ signif(.x$p.value, 3))
+  ) 
+
+# create plot data type
+plot_data_RD <- rd_aggregate_tb %>% 
+  dplyr::filter(lake != 'Poschiavo') %>% 
+  pivot_longer(cols = c(lake_richness:non_native), names_to = "richness_type", values_to = "richness_value") %>% 
+  pivot_longer(cols = dissimilarity_ross:sd_ffd, names_to = "dissimilarity_type", values_to = "diss_value") %>% 
+  left_join(rd_corvalues)
+
+
+plot_data_RD <- plot_data_RD %>% 
+  ungroup() %>% 
+  mutate(richness_type = dplyr::recode(richness_type, 
+                                       'lake_richness' = 'all species',
+                                       'native' = 'widespread \n native',
+                                       'endemic' = 'in situ \n diversification (ISD)',
+                                       'non_native' = 'non-native',
+                                       'native_intro' = 'introduced \n native',
+                                       'endemic_intro' = 'introduced ISD'), 
+         temp_bin  = dplyr::recode(temp_bin, 
+                                   'temp_05' = '2.5° to 7.5°',
+                                   'temp_10' = '7.5° to 12.5°',
+                                   'temp_15' = '12.5° to 17.5°',
+                                   'temp_20' = '17.5° to 22.5°'))
+
+# relevel factors
+sort(unique(plot_data_RD$richness_type))
+plot_data_RD$richness_type <- factor(
+  plot_data_RD$richness_type,
+  levels = sort(unique(plot_data_RD$richness_type))[c(1,6,2,5,3,4)]
+)
+
+plot_data_RD$temp_bin <- factor(
+  plot_data_RD$temp_bin,
+  levels = sort(unique(plot_data_RD$temp_bin))[rev(c(3, 4, 1, 2))]
+)
+
+# rescale to per richness gain - this is interesting but makes it more unintuitive to understand
+# plot_data_RD <- plot_data_RD %>% 
+#   group_by(temp_bin, richness_type, dissimilarity_type) %>% 
+#   mutate(richness_value = richness_value - min(richness_value))
+
+
+# Confirm levels
+levels(plot_data_RD$richness_type)
+
+my_custom_theme <- function() {
+  theme_bw() +
+    theme(
+      panel.grid = element_blank(),
+      legend.position = 'none',
+      strip.background = element_blank(), 
+      aspect.ratio = 1,
+      strip.text = element_text(size = 7), 
+      text = element_text(size = 8)
+    )
+}
+
+
+# Then plot (no change needed here)
+ggplot(data = plot_data_RD %>%
+         filter(dissimilarity_type == 'dissimilarity_ross')) +
+  geom_point(aes(x = richness_value, y = diss_value)) +
+  stat_smooth(
+    aes(
+      x = richness_value, y = diss_value,
+      col = richness_type,
+      lty = case_when(p_value < 0.05 ~ '1', TRUE ~ '2'),
+      fill = case_when(p_value < 0.05 ~ 'gray50', TRUE ~ 'transparent')
+    ),
+    method = 'lm'
+  ) +
+  facet_grid(temp_bin ~ richness_type) + 
+  my_custom_theme() + 
+  scale_fill_manual(values = c('gray50', 'transparent')) +
+  ylab('Response Dissimilarity') +
+  xlab('Species Richness')
+
+
+ggplot(data = plot_data_RD %>% 
+  filter(dissimilarity_type == 'divergence_ross')) + 
+    geom_point(aes(x = richness_value, y = diss_value)) + 
+  stat_smooth(aes(x = richness_value, y = diss_value, col = richness_type, 
+                  lty = case_when(p_value < 0.05 ~ '1',  T ~ '2'), 
+                  fill = case_when(p_value < 0.05 ~ 'gray50',  T ~ 'transparent')), method = 'lm') + 
+  facet_grid(temp_bin ~ richness_type) + 
+  my_custom_theme() + 
+  scale_fill_manual(values = c('gray50', 'transparent')) + 
+  ylab('Response Divergence') + 
+  xlab('Species Richness')
+
+
+ggplot(data = plot_data_RD %>% 
+         filter(dissimilarity_type == 'sd_ffd')) + 
+    geom_point(aes(x = richness_value, y = diss_value)) + 
+  stat_smooth(aes(x = richness_value, y = diss_value, col = richness_type, 
+                  lty = case_when(p_value < 0.05 ~ '1',  T ~ '2'), 
+                  fill = case_when(p_value < 0.05 ~ 'gray50',  T ~ 'transparent')), method = 'lm') + 
+  facet_grid(temp_bin ~ richness_type) + 
+  my_custom_theme() + 
+  scale_fill_manual(values = c('gray50', 'transparent')) + 
+  ylab('Response SD') + 
+  xlab('Species Richness')
+
+
+ggplot(data = plot_data_RD %>%
+  filter(dissimilarity_type == 'mean_ffd')) + 
+    geom_point(aes(x = richness_value, y = diss_value)) + 
+  stat_smooth(aes(x = richness_value, y = diss_value, col = richness_type, 
+                  lty = case_when(p_value < 0.05 ~ '1',  T ~ '2'), 
+                  fill = case_when(p_value < 0.05 ~ 'gray50',  T ~ 'transparent')), method = 'lm') + 
+  facet_grid(temp_bin ~ richness_type) + 
+  my_custom_theme() + 
+  scale_fill_manual(values = c('gray50', 'transparent')) + 
+  ylab('Response Mean') + 
+  xlab('Species Richness')
+```
+
+
+```{r}
+# create plot data type for phosphorous
+plot_data_phos <- rd_aggregate_tb %>% 
+  dplyr::filter(lake != 'Poschiavo') %>% 
+  pivot_longer(cols = c(phos_max), names_to = "richness_type", values_to = "richness_value") %>% 
+  pivot_longer(cols = dissimilarity_ross:sd_ffd, names_to = "dissimilarity_type", values_to = "diss_value")%>% 
+         left_join(rd_corvalues)
+
+
+plot_data_phos <- plot_data_phos %>% 
+  ungroup() %>% 
+  mutate(dissimilarity_type = dplyr::recode(dissimilarity_type, 
+                                       'dissimilarity_ross' = 'response dissimilarity',
+                                       'divergence_ross' = 'response divergence',
+                                       'sd_ffd' = 'response SD',
+                                       'mean_ffd' = 'response mean'), 
+         temp_bin  = dplyr::recode(temp_bin, 
+                                   'temp_05' = '2.5° to 7.5°',
+                                   'temp_10' = '7.5° to 12.5°',
+                                   'temp_15' = '12.5° to 17.5°',
+                                   'temp_20' = '17.5° to 22.5°'))
+
+plot_data_phos$dissimilarity_type <- factor(
+  plot_data_phos$dissimilarity_type,
+  levels = sort(unique(plot_data_phos$dissimilarity_type))[c(1,4,2,3)]
+)
+
+unique(plot_data_phos$temp_bin)
+plot_data_phos$temp_bin <- factor(
+  plot_data_phos$temp_bin,
+  levels = sort(unique(plot_data_phos$temp_bin))[c(3,4,1,2)]
+)
+
+phos_plot <- ggplot(data = plot_data_phos) + 
+    geom_point(aes(x = richness_value, y = diss_value)) + 
+  stat_smooth(aes(x = richness_value, y = diss_value, 
+                  lty = case_when(p_value < 0.05 ~ '1',  T ~ '2'), 
+                  fill = case_when(p_value < 0.05 ~ 'gray50',  T ~ 'void'), 
+                  col = estimate), 
+              method = 'lm') + 
+  facet_grid(dissimilarity_type~temp_bin, scales = 'free') + 
+  my_custom_theme() + 
+  scale_fill_manual(values = c('gray50', 'transparent')) + 
+  scale_colour_gradient2() +
+  ylab('Response metric') + 
+  xlab('Maximum phosphorous')
+phos_plot
+```
+
+
+# Plot summarisings all correlations between richness and response diversity
+
+```{r}
+
+rd_corvalues_v2 <- rd_corvalues %>% 
+  ungroup() %>% 
+  filter(richness_type != 'phos_max') %>% 
+  mutate(dissimilarity_type = dplyr::recode(dissimilarity_type, 
+                                       'dissimilarity_ross' = 'response dissimilarity',
+                                       'divergence_ross' = 'response divergence',
+                                       'sd_ffd' = 'response SD',
+                                       'mean_ffd' = 'response mean'), 
+         richness_type = dplyr::recode(richness_type, 
+                                       'lake_richness' = 'all species',
+                                       'native' = 'widespread native',
+                                       'endemic' = 'in situ diversification (ISD)',
+                                       'non_native' = 'non-native',
+                                       'native_intro' = 'introduced native',
+                                       'endemic_intro' = 'introduced ISD'), 
+         temp_bin  = dplyr::recode(temp_bin, 
+                                   'temp_05' = '2.5 to 7.5',
+                                   'temp_10' = '7.5 to 12.5',
+                                   'temp_15' = '12.5 to 17.5',
+                                   'temp_20' = '17.5 to 22.5'))
+
+# relevel factors
+sort(unique(rd_corvalues_v2$richness_type))
+rd_corvalues_v2$richness_type <- factor(
+  rd_corvalues_v2$richness_type,
+  levels = sort(unique(rd_corvalues_v2$richness_type))[rev(c(1,6,2,5,3,4))]
+)
+
+rd_corvalues_v2$temp_bin <- factor(
+  rd_corvalues_v2$temp_bin,
+  levels = sort(unique(rd_corvalues_v2$temp_bin))[c(3, 4, 1, 2)]
+)
+
+rd_corvalues_v2$dissimilarity_type <- factor(
+  rd_corvalues_v2$dissimilarity_type,
+  levels = sort(unique(rd_corvalues_v2$dissimilarity_type))[c(1,4,2,3)]
+)
+
+
+overall_plot <- ggplot(data = rd_corvalues_v2) + 
+  geom_tile(aes(y = richness_type, x = temp_bin, fill = estimate)) + 
+  geom_text(aes(y = richness_type, x = temp_bin, label = case_when(p_value > 0.05 ~ '', 
+                                                                   p_value < 0.05 & p_value > 0.01 ~ '*', 
+                                                                   p_value < 0.01 & p_value > 0.001~ '**', 
+                                                                   p_value < 0.001 ~ '***'))) + 
+  facet_wrap(~dissimilarity_type) + 
+  scale_fill_gradient2('Spearman rank') + 
+  xlab('\n Habitat temperature bin') + 
+  ylab('Richnes grouping \n') + 
+  theme_minimal() + 
+  theme(panel.grid = element_blank(), 
+        legend.position = 'bottom')
+
+
+```
+
+
+# Save final figures manually
+```{r, include=FALSE}
+dir.create('figures/response_diversity_Figs', recursive = T)
+
+my_custom_theme_V2 <- function() {
+  theme_bw() +
+    theme(
+      panel.grid = element_blank(),
+      legend.position = 'none',
+      strip.background = element_blank(), 
+      aspect.ratio = 1,
+      strip.text = element_text(size = 10), 
+      text = element_text(size = 10)
+    )
+}
+
+### Dissimilarity effect
+png('figures/response_diversity_Figs/Richness_effect_dissimilarity.png', res = 600, width = 4000, height = 4000)
+ggplot(data = plot_data_RD %>%
+         filter(dissimilarity_type == 'dissimilarity_ross', 
+                richness_type %in% levels(richness_type)[c(1,2,3)], 
+                temp_bin %in% unique(temp_bin)[c(1,4)]) %>% 
+         mutate(fill_condition = case_when(p_value < 0.05 & richness_type == 'widespread \n native' ~ '#C7C35E',
+                                           p_value < 0.05 & richness_type == 'in situ \n diversification (ISD)' ~ '#5C92C4',
+                                           TRUE ~ 'white'))) +
+  geom_point(aes(x = richness_value, y = diss_value, col = richness_type)) +
+  stat_smooth(
+    aes(
+      x = richness_value, y = diss_value,
+      col = richness_type,
+      lty = case_when(p_value < 0.05 ~ '1', TRUE ~ '2'),
+      fill = fill_condition,
+      group = paste0(richness_type, temp_bin)
+    ),
+    method = 'lm'
+  ) +
+  facet_grid(temp_bin ~ richness_type, scales = 'free') + 
+  my_custom_theme_V2() + 
+  scale_fill_manual(values = c('gray50', 'transparent')) +
+  ylab('Response Dissimilarity') +
+  xlab('Species Richness') + 
+  scale_fill_manual(values = c("#5C92C4",  "#C7C35E", "white")) + 
+  scale_colour_manual(values = c("gray40",  "#C7C35E", "#5C92C4"))
+dev.off()
+
+png('figures/response_diversity_Figs/Richness_effect_divergence.png', res = 600, width = 4000, height = 4000)
+diss_data <- plot_data_RD %>%
+         filter(dissimilarity_type == 'divergence_ross', 
+                richness_type %in% levels(richness_type)[c(1,2,3)], 
+                temp_bin %in% unique(temp_bin)[c(1,4)]) %>% 
+         mutate(fill_condition = case_when(p_value < 0.05 & richness_type == 'widespread \n native' ~ '#C7C35E',
+                                           p_value < 0.05 & richness_type == 'in situ \n diversification (ISD)' ~ '#5C92C4',
+                                           p_value < 0.05 & richness_type == 'all species' ~ 'gray40',
+                                           TRUE ~ 'white'))
+ggplot(data = diss_data) +
+  geom_point(aes(x = richness_value, y = diss_value, col = richness_type)) +
+  stat_smooth(
+    aes(
+      x = richness_value, y = diss_value,
+      col = richness_type,
+      lty = case_when(p_value < 0.05 ~ '1', TRUE ~ '2'),
+      fill = fill_condition,
+      group = paste0(richness_type, temp_bin)
+    ),
+    method = 'lm'
+  ) +
+  facet_grid(temp_bin ~ richness_type, scales = 'free') + 
+  my_custom_theme_V2() + 
+  scale_fill_manual(values = c('gray50', 'transparent')) +
+  ylab('Response Dissimilarity') +
+  xlab('Species Richness') + 
+  scale_fill_manual(values = c("#C7C35E","gray40", "white")) + 
+  scale_colour_manual(values = c("gray40",  "#C7C35E", "#5C92C4"))
+dev.off()
+
+# Plot all richness ~ response diversity summaries
+png('figures/response_diversity_Figs/Richness_effect_all.png', res = 600, width = 5000, height = 2250)
+overall_plot
+dev.off()
+
+### Phosphorous effect
+png('figures/response_diversity_Figs/Phos_max_depth_response.png', res = 600, width = 4000, height = 4000)
+phos_plot + my_custom_theme_V2()
+dev.off()
+
+```
+

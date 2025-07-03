@@ -1,0 +1,115 @@
+---
+title: ""
+output: html_document
+date: "`r Sys.Date()`"
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# packages relevant for data analysis
+pacman::p_load(
+  tidyverse,
+  here,
+  readr,
+  readxl,
+  gratia,
+  mgcv,
+  forcats,
+  ggpubr,
+  RColorBrewer,
+  broom,
+  grid,
+  DHARMa,
+  mgcViz,
+  gridExtra,
+  viridis, 
+  modelsummary,
+  gratia, 
+  broom,
+  tidyverse,
+  DHARMa,
+  mgcv,
+  gratia,
+  mgcViz
+)
+
+```
+
+
+
+### Plot response curves across different species groups 
+
+```{r}
+
+# read in modelled response curves
+all_preds <- bind_rows(lapply(list.files('outputs', pattern = 'temperature_predictions.RDS', full.names = T, recursive = T), readRDS))
+
+# get swiss wide biogeographic affinity
+biogeography_swisswide <-  read_csv("data/taxonomy_May2025/species_lake_list_raw_EDITED.csv") %>% 
+  select(Species_ecotype, Swisswide_biogeographic_status) %>% 
+  unique()
+
+# species predictions with biogeographic status across country assigned
+all_preds <- left_join(all_preds, biogeography_swisswide, by = c('name' = 'Species_ecotype'))
+
+# get a focal scenario to compare response curves
+focal_scenario <- all_preds %>% 
+            # filter(!grepl('Salvelinus_sp_Pro', name)) %>% 
+            filter(k == 3, including_electro == T) %>% 
+            rename(species = name)
+
+# rescale all between 0 and 1
+focal_scenario <- focal_scenario %>% 
+  group_by(species) %>% 
+  mutate(value_01 = (value - min(value)) / (max(value) - min(value)))
+
+# refactorise
+focal_scenario <- focal_scenario %>% 
+  mutate(Swisswide_biogeographic_status  = dplyr::recode(Swisswide_biogeographic_status , 
+                                       'native' = 'widespread \n native',
+                                       'endemic' = 'in situ \n diversification (ISD)',
+                                       'non_native' = 'non-native',
+                                       'native_intro' = 'introduced \n native',
+                                       'endemic_intro' = 'introduced ISD'))
+
+png('figures/thermal_niche_across_categories_ELECTRO.png', res = 300, height = 1000, width = 2000)
+ggplot(data = focal_scenario %>% unique(), 
+       aes(x = mean_last_7days, y = value_01, group = species, color = Swisswide_biogeographic_status)) +
+  geom_line() +
+  theme_bw() + 
+  #theme_bw(base_size = 16) +
+  ylab("Abundance (rescaled)") +
+  xlab("Temperature") +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        legend.title = element_blank(),
+        strip.background = element_blank(), 
+        legend.position = 'none', 
+        aspect.ratio = 1) +
+  facet_wrap(~Swisswide_biogeographic_status) + 
+  scale_colour_manual(values =rev(c("#C75E5E",  "#C7C35E", "#5C92C4")))
+dev.off()
+
+
+png('figures/thermal_niche_across_categories_species_ELECTRO.png', res = 300, height = 3000, width = 4000)
+ggplot(data = focal_scenario %>% unique(), 
+       aes(x = mean_last_7days, y = value_01, group = species, color = Swisswide_biogeographic_status)) +
+  geom_line() +
+  theme_bw() + 
+  #theme_bw(base_size = 16) +
+  ylab("Abundance (rescaled)") +
+  xlab("Temperature") +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        legend.title = element_blank(),
+        strip.background = element_blank(), 
+        legend.position = 'none') +
+  facet_wrap(~species) + 
+  scale_colour_manual(values = rev(c("#C75E5E",  "#C7C35E", "#5C92C4")))
+dev.off()
+
+
+```

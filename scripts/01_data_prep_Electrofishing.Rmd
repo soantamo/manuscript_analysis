@@ -1,0 +1,414 @@
+---
+title: "01_data_prep_Electrofishing"
+date: "`r Sys.Date()`"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+pacman::p_load(tidyverse, here, readr, viridis)
+
+```
+
+#Introduction
+Data preparation for analysis.
+
+```{r}
+
+# read in data
+projet_lac_data <- read.csv("data/PLDB_final_short_depth_climate_cleantaxa_20052022.csv")
+
+str(projet_lac_data)
+
+projet_lac_data$LakeBasin <- as.factor(projet_lac_data$LakeBasin)
+
+projet_lac_data |> 
+  distinct(LakeBasin)
+
+```
+
+#1. Data preparation
+##Abundance data
+```{r}
+
+# preparing additional column with abundance data of each species
+abundance_data <- projet_lac_data |> 
+  # exclude rows without taxa information
+  # filter(!Taxa_latin_FINAL %in% "NO_FISH") |>  # here I think this should be included
+  #select columns relevant for species individual occurrences
+  select(Lake, Basin3, Fishec_action, mean_temp_per_day, mean_last_7days, Num_indiv_soak, Depth_sample, Taxa_latin_FINAL, Protocol) |>
+  # turn number into whole number of negative binomial models
+  mutate(n = case_when(Num_indiv_soak < 1 ~ 1, T ~ round(Num_indiv_soak))) %>% 
+  # sum abundances across fishing event
+  group_by(Lake, Basin3, Fishec_action, mean_temp_per_day, mean_last_7days, Depth_sample, Taxa_latin_FINAL, Protocol) %>% 
+  summarise(n = sum(n, na.rm = T)) %>% 
+  # values_fill = 0 added to make all NAs into 0
+  pivot_wider(names_from = Taxa_latin_FINAL, values_from = n, values_fill = 0)
+
+
+# abundance of each species
+abundance_data_long <- abundance_data |> 
+  pivot_longer(cols = !(Lake : Protocol), names_to = "Species", values_to = "Abundance")
+
+# add presence-absence column
+abundance_data_long$Presence <- ifelse(abundance_data_long$Abundance >= 1, 1, 0)
+
+# View(abundance_data_long)
+
+max(abundance_data_long$Presence) #check if presence-absence only 0 and 1
+max(abundance_data_long$Abundance)
+
+# check plot of abundances
+
+ggplot(data = abundance_data_long %>% filter(Abundance > 0)) + geom_point(aes(x = log10(Abundance+1), y = Species))
+
+# we only need information on species present in the lake, not all of them
+abundance_data_long_lakepresence <- abundance_data_long |> 
+  group_by(Lake, Species) |>
+  # . stands for data being piped in do function
+  do(LakePresence = max(.$Presence)) |> 
+  unnest(cols = LakePresence)
+
+# double-check 
+abundance_data_long_lakepresence |>
+  filter(LakePresence == "1") |> 
+  group_by(Lake, LakePresence) |>
+  count() %>% 
+  arrange(n)
+
+# join the two dfs so that we filter the large dataset only to lakes where species are present in project Lac
+# (e.g., not modelling absences in lakes with only absences)
+df_final <- abundance_data_long_lakepresence |> 
+  filter(LakePresence == "1") |> 
+  left_join(abundance_data_long)
+
+#double-check if all lakepresence = 1
+max(df_final$LakePresence)
+min(df_final$LakePresence)
+
+# check number of occurrences per lake
+df_final %>% 
+  group_by(Species, Lake) %>% 
+  filter(Presence == 1) %>% 
+  count
+
+# Now remove "NO_FISH" as 0s are added in through the pivot table
+df_final <- df_final %>% 
+  filter(Species != 'NO_FISH')
+  
+```
+
+## Checking impact of excluding electrofishing
+```{r}
+
+# Which fish are caught mostly with electrofishing?
+projet_lac_data %>% 
+  group_by(Taxa_latin_FINAL, Type_fishing ) %>% 
+  count %>% 
+  group_by(Taxa_latin_FINAL) %>% 
+  filter(n==max(n)) %>% 
+  filter(Type_fishing == 'electrofishing') %>% 
+  pull(Taxa_latin_FINAL)
+
+# This is important to know - could re-evaluate whether to include these species and use the fishing type as a factor in the modelling
+
+```
+
+
+##Taxonomy and requirements
+
+We pooled several species into ecomorphs to prevent loss of data-points. 
+We also excluded species that were caught less than 10 times in the whole Projet Lac. 
+
+```{r}
+
+# save taxonomy files
+dir.create('data/taxonomy_May2025', recursive = T)
+
+# Save a basefile with the taxonomic structure before we assign ecotypes
+df_final %>% 
+  select(Species) %>% 
+  unique() %>% 
+  arrange(Species) %>% 
+  write_csv(., 'data/taxonomy_May2025/species_list_raw.csv')
+
+# We need also a file of the base taxonomy and the lake identities for assigning lake level transference
+df_final %>% 
+  select(Species, Lake, Basin3) %>% 
+  unique() %>% 
+  arrange(Species) %>% 
+  write_csv(., 'data/taxonomy_May2025/species_lake_list_raw.csv')
+
+
+# Here I now manually matched all these to our decided ecotypes for the species and corrected names in specific lakes based on updated taxonomic revisions. 
+final_taxonomy <- read_csv('data/taxonomy_May2025/species_lake_list_raw_EDITED.csv')
+
+# join in taxonomic fixes to data
+df_final2 <- left_join(df_final, final_taxonomy %>% select(Species, Lake, Basin3, Species_ecotype, Swisswide_biogeographic_status, Lake_biogeographic_status) %>% unique())
+
+# check species list
+species <- df_final2 |> 
+  distinct(Species_ecotype) %>% 
+  pull(Species_ecotype) %>% 
+  sort
+
+species
+
+# which are missing?
+df_final2 %>% 
+  filter(is.na(Species_ecotype)) %>% 
+  pull(Basin3)
+
+# check how many species have less than 10 overall observations: 30
+df_final2 |> 
+  group_by(Species_ecotype) |> 
+  summarize(prevelance = sum(Presence, na.rm = T)) |> 
+  filter(prevelance <= 10) %>% 
+  arrange(prevelance) %>% 
+  print(n = 100)
+
+# Comment on each species being removed from the analysis. Key here is if the species provides unique information so should try 
+# and keep even if few records. 
+# Alosa_fallax    # Keep - Contributes uniquely to Maggiore with Alosa alosa - Keep
+# Ameiurus_melas  # Keep - Contributes althought having few records to Geneva and Magiorre - Keep
+# Barbus_plebejus # Remove - just one record - Contributes uniquely to Maggiore
+# Carassius_gibelio     # Keep - Contributes uniquely to Magiorre and Lugano- Keep
+# Chondrostoma_nasus    # Remove - But check again if using electrofishing
+# Chondrostoma_soetta   # Remove - But check again if using electrofishing
+# Coregonus_sp_pelagic_profundal # Deep water pelagic form from Lake lucern - Combine with profundal?
+# Cottus_gobio_Rhine    # Keep - these are the only forms in Geneva and Constance 
+# Esox_cisalpinus       # Keep - but might be better to combine as Esox spp. for both north and south of alps?
+# Gasterosteus_gymnurus # Remove
+# Gobio_obtusirostris   # Remove - only one presences in Constance - Danubian lineage - Gobio gobio also present - Remove
+# Oncorhynchus_mykiss   # Keep - Non-native in Constance and Maggiore - Keep
+# Padogobius_bonelli    # Remove - In Po lineage only - probably mostly caught with electrofishing.
+# Phoxinus_septimaniae  # Remove - Only present in poschiavo and chalain
+# Phoxinus_sp           # Remove as csikii in Pochiavo
+# Rutilus_aula          # should remove as Pigus is not in the sourthern lakes we consider here so we cannot assign a southern Rutilus
+# # df_final %>% filter(grepl('Rutilus', Species), Basin3 == 'Maggiore', Abundance != 0) %>% ggplot(data = .) + geom_histogram(aes(x = Depth_sample, col = Species))
+# Salaria_fluviatilis_French # combined now into Salaria fluviatilis - still few records as most records are from electrofishing
+# Salaria_fluviatilis_Italian # combined now into Salaria fluviatilis - still few records as most records are from electrofishing
+# Salmo_cenerinus # only in poschiavo - cannot model with just 1 dataset
+# Salmo_labrax    # only in Sils - 3 records so probably cannot be modelled reliably
+# Salmo_marmoratus # In 3 lakes in the Po catchment but only 4 records..
+# Salmo_sp
+# Salvelinus_namaycush # Only recorded in Poschiavo
+# Salvelinus_profundus # This gets put into profundal form across all lakes
+# Salvelinus_sp           # These are unidentified species - not sure if to keep these
+# Salvelinus_sp_Limnetic  # Should try and keep as it is a unique form
+# Telestes_muticellus     # Mostly caught with electrofishing
+# Thymallus_thymallus     # Mostly caught with electrofishing
+
+# Manually remove those based on decisions above of species with less than 10 overall observations
+# RE-EVALUATE THIS IF USING ELECTROFISHING SURVEYS
+df_models <- df_final2 |> 
+  filter(!Species_ecotype %in% c("Phoxinus_sp", 
+                         "Barbus_plebejus", "Oncorhynchus_mykiss", "Salmo_sp",
+                         "Chondrostoma_nasus", "Chondrostoma_soetta", "Gasterosteus_gymnurus", 
+                         "Gobio_obtusirostris", "Padogobius_bonelli", "Phoxinus_septimaniae", 
+                         "Rutilus_aula", "Salmo_cenerinus", "Salmo_labrax", "Salmo_marmoratus", 
+                         "Telestes_muticellus", "Lampetra_planeri", "Rhodeus_amarus", 
+                         "Alburnoides_bipunctatus", "Thymallus_thymallus"))
+  
+species <- df_models |> 
+  group_by(Species) |> 
+  summarize(number_of_records = sum(Presence),
+    total_abundance = sum(Abundance))
+
+species
+
+```
+
+##Data frames for GAMs
+
+We compiled four data frames for the four types of general additive models that were run: Species with: 
+1) binomial data occurring in one lake, 
+2) abundance data occurring in one lake, 
+3) binomial data  occuring in multiple lakes,
+4) abundance data and occuring in multiple lakes. 
+
+```{r}
+
+
+###Overview
+#1. Separation of species into binomial and abundance data: sample with abundance > 1, 0 and 1 only -> binomial data
+#2. species that occur only in one lake: Lake not added as random effect
+
+df_models_final <- df_models %>% 
+  # remove species original column
+  select(-Species) %>% 
+  # rename ecotype as species
+  rename(Species = Species_ecotype) %>% 
+  group_by(Species) %>% 
+  mutate(model_type = case_when(max(Abundance) > 1 ~ 'zip', T ~ 'bin'),
+         lake_random = case_when(n_distinct(Lake) > 1 ~ T, T ~ F)) %>% 
+  filter(!is.na(Depth_sample))
+  
+# save the df of the refined species, df will be used for the models
+saveRDS(df_models_final, "data/df_models_final_ELECTRO.rds")
+
+# checking logic worked as expected
+df_models_final %>% 
+  group_by(Species) %>% 
+  mutate(max_abundance = max(Abundance), 
+         n_lake = n_distinct(Lake)) %>% 
+  select(n_lake, Species, max_abundance, lake_random, model_type) %>% 
+  unique() %>% 
+  print(n = 52)
+
+``` 
+
+
+Old manual fixing of species names before generation of table compiling all relevant information.
+
+```{r}
+
+# # 
+# 
+# 
+# #######refining errors in species' identity that were noticed upon examination of the
+# # data frame, following the table 16 in the Projet Lac "Synthesis report"
+# 
+# # C. brienzii should not be present in lake Thun, add to Coregonus sp.
+# 
+# df_final <- df_final |>
+#   mutate(Species = ifelse(Species %in% c("Coregonus_brienzii") & Lake %in% c("Thun"),
+#                           "Coregonus_sp", as.character(Species)))
+# 
+# # Salvelinus umbla in Lake Thun should be Salvelinus sp. 
+# 
+# df_final <- df_final |>
+#   mutate(Species = ifelse(Species %in% c("Salvelinus_umbla") & Lake %in% c("Thun"),
+#                           "Salvelinus_sp", as.character(Species)))
+# 
+# 
+# # Squalius squalus in Biel and Neuchatel to Squalius cephalus
+# 
+# df_final <- df_final |>
+#   mutate(Species = ifelse(Species %in% c("Squalius_squalus") & Lake %in% c("Biel", 
+#                                                                            "Neuchatel"),
+#                           "Squalius_cephalus", as.character(Species)))
+# 
+# 
+# #######Pooling species to be able to include more samples
+# # Profundal Cottus gobio are pooled
+# 
+# df_final <- df_final |>
+#   mutate(Species = ifelse(Species %in% c(
+#     "Cottus_gobio_Profundal_Thun",
+#     "Cottus_gobio_Profundal_Lucerne", "Cottus_gobio_Profundal_Walen"
+#   ),
+#   "Cottus_sp_Profundal", as.character(Species)
+#   ))
+# 
+# 
+# # Salvelinus is pooled into "profundal" and "limnetic" habitats
+# 
+# # profundal
+# 
+# df_final <- df_final |>
+#   mutate(Species = ifelse(Species %in% c( "Salvelinus_sp_Profundal_dwarf_Thun", 
+#                                           "Salvelinus_sp_Profundal_dwarf_VWS", 
+#                                           "Salvelinus_sp_Profundal_extreme_Thun",
+#                                           "Salvelinus_sp_Profundal_Walen_I", 
+#                                           "Salvelinus_sp_Profundal_Walen_II", 
+#                                           "Salvelinus_profundus"),
+#   "Salvelinus_sp_Profundal", as.character(Species)
+#   ))
+# 
+# 
+# # limnetic 
+# df_final <- df_final |>
+#   mutate(Species = ifelse(Species %in% c("Salvelinus_sp_Limnetic_Thun", "Salvelinus_sp_Limnetic_VWS"),
+#                           "Salvelinus_sp_Limnetic", as.character(Species)))
+# 
+# 
+# # Coregonus species are pooled to new groups based on ecomorphs,
+# # following De-Dayne et al. 2022
+# 
+# # Albeli
+# df_final <- df_final |>
+#   mutate(Species = ifelse(Species %in% c("Coregonus_albellus", "Coregonus_candidus", "Coregonus_confusus",
+#                                          "Coregonus_heglingus", "Coregonus_zugensis"),
+#                           "Coregonus_sp_albeli", as.character(Species)))
+# # Balchen
+# df_final <- df_final |>
+#   mutate(Species = ifelse(Species %in% c("Coregonus_alpinus", "Coregonus_arenicolus", "Coregonus_duplex",
+#                         "Coregonus_helveticus", "Coregonus_palaea"),
+#                           "Coregonus_sp_balchen", as.character(Species)))
+# 
+# # Felchen
+# df_final <- df_final |>
+#   mutate(Species = ifelse(Species %in% c("Coregonus_brienzii", "Coregonus_fatioi", "Coregonus_intermundia",
+#                                          "Coregonus_litoralis", "Coregonus_macrophthalmus", "Coregonus_zuerichensis"),
+#                           "Coregonus_sp_felchen", as.character(Species)))
+# 
+# # Large pelagic
+# df_final <- df_final |>
+#   mutate(Species = ifelse(Species %in% c("Coregonus_acrinasus", "Coregonus_wartmanni"),
+#                           "Coregonus_sp_large_pelagic", as.character(Species)))
+# 
+# # Benthic profundal
+# df_final <- df_final |> 
+#   mutate(Species = ifelse(Species == "Coregonus_profundus",
+#                           "Coregonus_sp_benthic_profundal", as.character(Species)))
+# # Pelagic profundal
+# df_final <- df_final |> 
+#   mutate(Species = ifelse(Species == "Coregonus_nobilis",
+#                           "Coregonus_sp_benthic_profundal", as.character(Species))) # here gets combined with benthic form due to low sample size
+# 
+# # "Coregonus_sarnensis": could not be assigned to Albeli or Felchen
+# 
+# 
+# # Add Cottus gobio assignments based on ecotypes
+# 
+# # Po profundal
+# df_final <- df_final |> 
+#   mutate(Species = ifelse(Species == "Cottus_sp_Po_profundal",
+#                           "Cottus_sp_Profundal", as.character(Species)))
+# 
+# # Littoral - the unknown are only in sarnen and biel, and max depth of 60m. 
+# df_final <- df_final |> 
+#   mutate(Species = ifelse(Species %in% c("Cottus_gobio_Aare_littoral", "Cottus_gobio_unknownlineage"),
+#                           "Cottus_gobio_littoral", as.character(Species)))
+# 
+# # according to projet lac report, keep Rhine cottus lineage seperate, these are closer related to river lineage.
+# 
+# # checking table with Barbara
+# df_final %>% filter(grepl('Barbatula', Species)) %>% select(Basin3, Species) %>% unique
+# 
+# # Update Barbatula based on Calegari 2025
+# df_final <- df_final |> 
+#   mutate(Species = ifelse(Species %in% c("Barbatula_sp_Lineage_I", "Barbatula_sp_Lineage_II") & 
+#                             !Basin3 %in% c('ConstanceObersee', 'ConstanceUntersee', 'Geneva'), 
+#                           "Barbatula_ommata", 
+#                           as.character(Species)))
+# 
+# df_final <- df_final |> 
+#   mutate(Species = ifelse(Species %in% c("Barbatula_sp_Lineage_I", "Barbatula_sp_Lineage_II", "Barbatula_quignardi") & 
+#                             Basin3 %in% c('ConstanceObersee', 'ConstanceUntersee', 'Geneva'), 
+#                           "Barbatula_affinisfluvicola", 
+#                           as.character(Species)))
+# 
+# 
+# # Transfer phoxinus septimania to sp in poschiavo and chalain
+# df_final <- df_final |> 
+#   mutate(Species = ifelse(Species %in% c("Phoxinus_septimaniae"),
+#                           "Phoxinus_sp", as.character(Species)))
+# 
+# df_final %>% filter(grepl('Phoxinus', Species)) %>% select(Basin3, Species) %>% unique
+# 
+# # Transfer phoxinus septimania to sp in poschiavo and chalain
+# df_final <- df_final |> 
+#   mutate(Species = ifelse(Species %in% c("Salaria_fluviatilis_French", "Salaria_fluviatilis_Italian"),
+#                           "Salaria_fluviatilis", as.character(Species)))
+# 
+# # Combine Esox into both species to better recover niche
+# df_final <- df_final |> 
+#   mutate(Species = ifelse(Species %in% c("Esox_lucius", "Esox_cisalpinus"),
+#                           "Esox_spp", as.character(Species)))
+# 
+```
+
