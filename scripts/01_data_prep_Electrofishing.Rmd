@@ -29,6 +29,16 @@ projet_lac_data |>
 
 ```
 
+# Calculate data summaries from the overall data pre-subsetting
+```{r}
+
+projet_lac_data %>% 
+  select(Date_setting, Fishec_action, Lake, Basin3, Protocol, Type_fishing, Time_fishing_hrs) %>% 
+  group_by(Type_fishing) %>% 
+  summarise(mean_soak = mean(Time_fishing_hrs, na.rm = T))
+
+```
+
 #1. Data preparation
 ##Abundance data
 ```{r}

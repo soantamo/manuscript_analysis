@@ -1,6 +1,8 @@
 ## Function for calculating two dimensions of response diversity
 resp_div <- function(x, sign_sens = TRUE) {
   
+#  browser()
+  
   flag <- TRUE # flag to catch if all values are the same
   
   ## set diversity to zero if all values are the same
@@ -15,43 +17,53 @@ resp_div <- function(x, sign_sens = TRUE) {
     ## stat == range
     if(!sign_sens) {
       
-      d <- dist(x, diag = T) # euclidean distance matrix
-      Z <- exp(as.matrix(-d)) # similarity matrix
+      d <- dist(x, diag = T)  # euclidean distance matrix
+      Z <- exp(as.matrix(-d)) # similarity matrix - transforms values between 0 and 1
       nspecies <- length(x)
       p=matrix(1/nspecies,nspecies) # relative abundance matrix. Needs to be changed if evenness is of interest
       lenq = 1 # initialises hill number. Need to fix if we want any evenness indices
       qq <- seq(length=lenq, from=0, by=.11)
       
       # Initialise the Zp matrix to zero
-      Zp=matrix(0,nspecies,1)
+      Zp=matrix(0, nspecies, 1)
       
       # Compute Zp
       for (i in 1:nspecies){
+        
         for (j in 1:nspecies){
+          
           Zp[i,1]<-Zp[i,1]+Z[i,j]*p[j,1]
+          
         }
+        
       }
       
       # Initialise the Diversity matrix to zero
       Dqz = matrix(0, lenq ,1)
       
       for (iq in 1:lenq)  {
-        q<-qq[iq];
+        
+        q<-qq[iq]
+        
         for (zpi in 1:length(Zp[,1])){
-          if (Zp[zpi,1]>0)(
-            Dqz[iq,1]<-Dqz[iq,1]+ p[zpi,1]*(Zp[zpi,1])^(q-1))
+          
+          if (Zp[zpi,1]>0)(Dqz[iq,1]<-Dqz[iq,1]+ p[zpi,1]*(Zp[zpi,1])^(q-1))
+          
         }
         
-        Dqz[iq,1] <- Dqz[iq,1]^(1/(1-q));
+        Dqz[iq,1] <- Dqz[iq,1]^(1/(1-q))
+        
       }
+      
       div <- Dqz[iq,1]
+      
     }
     
   }
   
   if(sign_sens) {
-    div1 <- max(x) - min(x)
-    div2 <- abs(abs(max(x)) - abs(min(x)))
+    div1 <- max(x, na.rm = T) - min(x, na.rm = T)
+    div2 <- abs(abs(max(x, na.rm = T)) - abs(min(x, na.rm = T)))
     div <- (div1 - div2) / div1
   }
   

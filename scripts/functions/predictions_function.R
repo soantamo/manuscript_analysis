@@ -1,11 +1,13 @@
 
 predictions <- function(df){
-  require(broom)
-  require(tidyverse)
-  require(DHARMa)
-  require(mgcv)
-  require(gratia)
-  require(mgcViz)
+  pacman::p_load(
+    broom,
+    tidyverse,
+    DHARMa,
+    mgcv,
+    gratia,
+    mgcViz
+  )
   
   species_list <- df |> 
     distinct(Species) |> 
@@ -47,10 +49,11 @@ predictions <- function(df){
         fProtocol = factor("VERT"))
       
       # special case, because model not running with ZIP
-      if (i == "Coregonus_sp_benthic_profundal")  { 
+      if (i == "Coregonus_sp_benthic_profundal")  {
         
         gam_output <- gam(data = data, Presence ~ s(mean_last_7days, k = 3) +
                             s(fProtocol, bs = 're'), family = binomial)
+        
         # prepare residuals
         simulationOutput <- simulateResiduals(fittedModel = gam_output, plot = F)
         tiff_filename <- paste("gams_testing_1/gam_check/gam_check_", i, ".tiff", sep = "")

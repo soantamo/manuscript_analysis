@@ -1,0 +1,261 @@
+---
+title: "01_data_summaries_Electrofishing"
+date: "`r Sys.Date()`"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+
+```{r}
+
+pacman::p_load(tidyverse, here, readr, viridis, sf, mapview)
+
+```
+
+# Data
+```{r}
+
+# read in raw project lac
+projet_lac_data <- read.csv("data/PLDB_final_short_depth_climate_cleantaxa_20052022.csv")
+
+# read in electro fishing subsets
+df_electro <- readRDS('data/df_models_final_ELECTRO.rds')
+
+# join metadata of project lac
+df_electro %>% pull(Fishec_action) %>% unique %>% length
+df_electro %>% pull(Species) %>% unique %>% length
+
+# number of fishec actions per lake
+df_electro %>% 
+  ungroup() %>% 
+  select(Lake, Fishec_action) %>% 
+  group_by(Lake) %>% 
+  summarise(n_sample = n_distinct(Fishec_action)) %>% 
+  ungroup() %>% 
+  summarise(across(n_sample, c(range, mean)))
+
+# number of geographic locations sampled
+df_electro %>% 
+  ungroup() %>% 
+  select(Lake, Fishec_action) %>% 
+  unique() %>% 
+  left_join(.,
+            projet_lac_data %>% ungroup() %>% select(Lake, Fishec_action, Coordinates_start_N, Coordinates_start_E) %>% unique()) %>% 
+  ungroup() %>% 
+  select(Lake, Coordinates_start_N, Coordinates_start_E) %>% 
+  group_by(Lake) %>% 
+  summarise(n_sample = n_distinct(Coordinates_start_N, Coordinates_start_E)) %>% 
+  ungroup() %>% 
+  summarise(across(n_sample, c(range, mean)))
+```
+
+```{r}
+
+# summarise number of records and species per protocol and lake
+summary_table <- df_electro %>% 
+  filter(Presence == 1) %>%
+  group_by(Lake, Protocol) %>% 
+  summarise(
+    n_species = n_distinct(Species),
+    n_actions = n_distinct(Fishec_action),
+    .groups = "drop"
+  ) %>% 
+  rename(`number of species` = n_species, 
+         `number of observations` = n_actions)
+
+write_csv(summary_table, file = 'figures/observation_counts.csv')
+
+```
+
+
+# number of unique abundance estimates
+
+```{r}
+df_electro %>% 
+  filter(Presence == 1) %>% 
+  nrow
+
+df_electro %>% 
+  filter(Presence == 1) %>% 
+  group_by(Species) %>% 
+  summarise(n_row = length(Abundance)) %>% 
+  ungroup() %>% 
+  summarise(across(n_row, c(mean, range)))
+
+# count species observations and abundance estimates
+sp_observations <- df_electro %>% 
+  filter(Presence == 1) %>% 
+  group_by(Species) %>% 
+  summarise(n_row = length(Abundance), 
+            `min. abun.` = min(Abundance), 
+            `max. abun.` = max(Abundance), 
+            `median abun.` = round(median(Abundance)), 
+            `mean abun.` = signif(mean(Abundance),2)) %>% 
+  arrange(n_row) %>% 
+  rename(`n. observations` = n_row)
+
+write_csv(sp_observations, file = 'figures/species_observations.csv')
+  
+
+```
+
+
+
+# Create map of sampling
+
+```{r}
+
+pacman::p_load(tidyverse, sf, mapview, tmap, tmaptools, geos, basemaps, tidyterra, ggspatial, dplyr, purrr, furrr, future, readxl, terra, maptiles)
+
+map_sampling <- df_electro %>% 
+  ungroup() %>% 
+  select(Lake, Fishec_action, Protocol) %>% 
+  unique() %>% 
+  left_join(.,
+            projet_lac_data %>% ungroup() %>% 
+              select(Lake, Fishec_action, Coordinates_start_N, Coordinates_start_E) %>% 
+              unique())
+
+df_attr <- df_electro %>% 
+  ungroup() %>% 
+  select(Lake, Fishec_action, Protocol, Abundance, Species) %>% 
+  group_by(Fishec_action) %>% 
+  summarise(`Mean Abundance` = mean(Abundance[Abundance>0]), 
+            `Species richness` = length(unique(Species[Abundance>0])))
+
+map_sampling<- left_join(map_sampling, df_attr)
+
+# create sf object
+sampling_sf <- st_as_sf(map_sampling, 
+                        coords = c('Coordinates_start_E', 'Coordinates_start_N'), crs = 'epsg:4326')
+
+# create in swiss borders
+kanton <- read_sf("C:/Users/cw21p621/OneDrive - Universitaet Bern/01_Wyss_Academy_for_Nature/analysis/data-dump/swissboundaries3d_2021-07_2056_5728.shp/SHAPEFILE_LV95_LN02/swissBOUNDARIES3D_1_3_TLM_KANTONSGEBIET.shp")
+kanton <- st_transform(kanton, crs = 'epsg:4326')
+kanton_union <- st_union(kanton)
+
+# create directory 
+dir.create('figures/lake_sampling', recursive = T)
+
+# for one lake make simple map
+lake = 'Biel'
+
+lakes <- sampling_sf$Lake %>% unique
+
+
+# loop through all lakes and dynamically adjust mapping to scale across all lakes consistently
+lapply(lakes, function(lake){
+  print(lake)
+
+     lake_i <- sampling_sf %>% 
+                 filter(!Fishec_action %in% c('Zurich_337', 'Bodensee_783', 'Bodensee_254', 'Bodensee_255'), 
+                        Lake == lake)
+     
+     
+     make_wide_bbox <- function(x, padding = 0.05) {
+       bbox <- st_bbox(x)
+     
+       xrange <- bbox$xmax - bbox$xmin
+       yrange <- bbox$ymax - bbox$ymin
+     
+       xmid <- (bbox$xmax + bbox$xmin) / 2
+       ymid <- (bbox$ymax + bbox$ymin) / 2
+     
+       # Apply padding to original dimensions
+       width <- xrange * (1 + padding)
+       height <- yrange * (1 + padding)
+     
+       # If height > width, increase width to match height (make it wider)
+       if (height > width) {
+         width <- height
+       }
+     
+       half_width <- width / 2
+       half_height <- height / 2
+     
+       new_bbox <- st_bbox(c(
+         xmin = as.numeric(xmid - half_width),
+         xmax = as.numeric(xmid + half_width),
+         ymin = as.numeric(ymid - half_height),
+         ymax = as.numeric(ymid + half_height)
+       ), crs = st_crs(x))
+     
+       return(new_bbox)
+     }
+     
+     wide_bbox <- make_wide_bbox(lake_i, padding = 0.05)
+     wide_bbox_sf <- st_as_sfc(wide_bbox)
+     
+     # Get Esri satellite imagery
+     lake_point_buffer <- st_buffer(st_union(lake_i), 1000)
+     
+     zoom = 11
+     if(lake %in% c('Joux', 'Poschiavo', 'Sarnen', 'Morat')){zoom = 15}
+     if(lake %in% c('Biel', 'Zug', 'Sarnen')){zoom = 13}
+     
+     r <- get_tiles(wide_bbox_sf, provider = "Esri.WorldImagery", crop = TRUE, zoom = zoom)
+     
+     # Get raster extent and calculate width/height in inches at 300 dpi
+     ext_r <- terra::ext(vect(wide_bbox_sf))*100000
+     r_width <- ext_r[2] - ext_r[1]   # xmax - xmin
+     r_height <- ext_r[4] - ext_r[3]  # ymax - ymin
+     
+     # Optional scaling factor to adjust figure size (in inches)
+     scale_factor <- 0.8  # Increase to make plots bigger
+     
+     # Convert spatial extent to inches using scale factor
+     png_width <- (r_width / 1200) * scale_factor  # convert meters → inches (approximate)
+     png_height <- (r_height / 850) * scale_factor
+     
+     # Standard image diagonal in inches (used to normalize scale)
+     diag_in <- sqrt(png_width^2 + png_height^2)
+     
+     # Reference size: define size that looks good on a "reference image" (e.g., 6 inch diagonal)
+     ref_diag_in <- 6
+     size_scale <- diag_in / ref_diag_in  # scale up or down point size range
+     
+     # Define base size range (looks good at ref_diag_in)
+     base_size_range <- c(1, 4)
+     
+     # Scaled size range for current image
+     scaled_size_range <- base_size_range * size_scale
+     
+     font_size = 17 * size_scale
+     
+     # plot lake subset
+     png(paste0('figures/lake_sampling/', lake, '.png'),
+         width = png_width, height = png_height, units = "in",
+         res = 300)
+     plot_i <- ggplot() + 
+       geom_spatraster_rgb(data = r) + 
+         geom_sf(data = lake_i %>% arrange(`Mean Abundance`, desc(`Species richness`)), # remove ones with error in coordinates
+                 aes(col = log(`Mean Abundance`+1), 
+                     size = `Species richness`, 
+                     shape = Protocol)) + 
+       theme_void() + 
+       # theme(legend.position = "none") +
+       scale_colour_viridis_c(option = "turbo", 
+                              begin = 0.3, 
+                              limits = c(min(log(sampling_sf$`Mean Abundance`+1)), max(log(sampling_sf$`Mean Abundance`+1)))) + 
+       scale_size_continuous(limits = c(min(sampling_sf$`Species richness`), max(sampling_sf$`Species richness`)), 
+                             range = scaled_size_range)
+     print(plot_i + theme(legend.position = "none", text = element_text(size = font_size)) + ggtitle(lake) + 
+              annotation_scale(location = "tr", 
+                        bar_cols = c("black"),
+                        text_cex = font_size*0.04))
+     dev.off()
+
+})
+
+legend_grob <- cowplot::get_legend(plot_i)
+
+# save seperate legend
+png(filename = paste0('figures/lake_sampling/', 'legend.png'),
+    width = 4, height = 5, units = "in", res = 300)
+grid::grid.newpage()
+grid::grid.draw(legend_grob)
+dev.off()
+
+```
+
