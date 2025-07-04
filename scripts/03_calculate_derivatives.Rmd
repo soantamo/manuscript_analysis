@@ -189,10 +189,48 @@ for(i in 1:nrow(full_set)){
 ```
 
 
+### Supporting materials response curve figure
+
+```{r}
+
+
+  all_ffd_derivs_plot <- 
+    readRDS('data/final_ffd.RDS') %>% 
+    mutate(name = gsub('_', ' ', name))
+
+  png(paste0('figures/response_curves_k=3_withFFD.png'), 
+      res = 300, height = 3000, width = 3000)
+  ggplot(data = all_ffd_derivs_plot  %>% 
+                 mutate(row_id = row_number()) %>%
+                 filter(row_id %% 2 == 1) %>%  # keeps every other row, starting with the first
+                 select(-row_id) %>% 
+           filter(k == 3, 
+                  including_electro == T)) + 
+      geom_point(aes(x = mean_last_7days, y = value, col = ffd_per_0.1degree)) + 
+    scale_color_gradient2(name = 'response derivative', 
+                          low = "blue", mid = "gray50", high = "red",
+                          midpoint = 0, limits = c(-0.1, 0.1), 
+                          oob = scales::squish) +
+    facet_wrap(~name, scales = 'free_y', ncol = 5) + 
+      theme_bw() + 
+      theme(strip.background = element_blank(), 
+            strip.text = element_text(size = 7),
+            legend.position = 'bottom') + 
+        xlab('Temperature') + 
+    ylab('Scaled abundance')
+  dev.off()
+
+
+```
+
+
 
 ```{r}
 
 source('scripts/functions/functions.R')
+
+# read in object
+all_ffd_derivs <- readRDS('data/final_ffd.RDS')
 
 # sim
 all_ffd_derivs |>
@@ -214,6 +252,17 @@ all_ffd_derivs %>%
   filter(!is.na(ffd_per_0.1degree), !is.infinite(ffd_per_0.1degree)) %>% 
   summarise(across(ffd_per_0.1degree, ~sum(abs(.) > 0.1))) %>% 
   mutate(perc_high = ffd_per_0.1degree / nrow(all_ffd_derivs))
+
+
+# OK it is a tiny fraction of the data (<5%) that show extreme values
+all_ffd_derivs %>% 
+  group_by(colour, name) %>% 
+  filter(!is.na(ffd_per_0.1degree), !is.infinite(ffd_per_0.1degree)) %>% 
+  summarise(across(ffd_per_0.1degree, ~sum(abs(.) > 0.1))) %>% 
+  mutate(perc_high = ffd_per_0.1degree / nrow(.)) %>% 
+  arrange(perc_high) %>% 
+  print(n = 52)
+
 
 # these extremes may greatly bias our interpretations so bring them into boundaries
 all_ffd_derivs %>% 

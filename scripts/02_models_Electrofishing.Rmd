@@ -249,6 +249,32 @@ lapply(c(3,4,5), function(set_k){
 ```
 
 
+# read in k=3 for neater plot for supporting materials
+```{r}
+  # Save output
+  all_preds_long_limits <- readRDS("outputs/run_01052025_electro_k=3/temperature_predictions.RDS")
+
+  all_preds_long_limits <- 
+    all_preds_long_limits %>% 
+    mutate(name = gsub('_', ' ', name))
+  
+  png(filename = 'figures/thermal_response_curves__k=3.png', res = 300, height = 3000, width = 3000)
+  print(ggplot(data = all_preds_long_limits %>% 
+                 mutate(value = case_when(value > 500 ~ 500, T ~ value))) + 
+    geom_line(aes(x = mean_last_7days, y = value, group = name, col = colour)) + 
+    scale_colour_manual(name = 'inside sampling', values = c('red', 'gray50')) + 
+    facet_wrap(~name, scales = 'free_y', ncol = 5) + 
+    theme_bw() + 
+    theme(strip.background = element_blank(), 
+          strip.text = element_text(size = 7),
+          legend.position = 'bottom'))+
+    xlab('Temperature') + 
+    ylab('Predicted abundance')
+  dev.off()
+
+```
+
+
 
 # READ IN ALL DIFFERENT k VALUES AND CHECK THE RESPONSE CURVES ACROSS ALL SPECIES 
 ```{r}
