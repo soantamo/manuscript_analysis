@@ -119,7 +119,10 @@ lapply(c(3,4,5), function(set_k){
   is.na(all_gams) %>% sum
   writeLines(unique(df_models_final$Species)[which(is.na(all_gams))], file.path(output_folder, "missing_species.txt"))
 
+  ## save all the gams
+  saveRDS(all_gams[which(!is.na(all_gams))], paste0(output_folder, 'all_gams.RDS'))
 
+  
   #### PLOT SIMULATION OUTPUT AS VALIDATION OF MODEL STRUCTURE
 
   gam_check_folder <- file.path(output_folder, 'gam_check')
@@ -223,6 +226,7 @@ lapply(c(3,4,5), function(set_k){
     
     tidy_x <- tidy(all_gams[[x]])
     tidy_x$dev.exp <- signif(summary(all_gams[[x]])$dev.expl[1],2)
+    tidy_x$aic <- all_gams[[x]]$aic
     tidy_x$species_name <- x
     tidy_x
   }, error = function(e) NULL)
@@ -241,7 +245,13 @@ lapply(c(3,4,5), function(set_k){
                 unique() %>% 
                 arrange(dev.exp), file = paste0(output_folder, '/model_devexp.csv')) # really good model deviance explained
 
+  hist(unique(table_model_summaries$aic))
+  write_csv(table_model_summaries %>% 
+                select(species_name, aic) %>% 
+                unique() %>% 
+                arrange(aic), file = paste0(output_folder, '/model_aic.csv')) # really good model deviance explained
 
+  
 #### END OF LOOPING ACROSS K VALUES
 
 })

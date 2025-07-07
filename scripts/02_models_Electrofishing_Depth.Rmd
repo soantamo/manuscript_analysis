@@ -1,0 +1,661 @@
+---
+title: "02_models_Electrofishing_Depth"
+author: "Sophie Moreau, Conor Waldock"
+date: "2024-09-27"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+#General Additive Models
+Running models but with depth as a covariate to test whether the thermal response curves are the same. 
+
+```{r}
+# packages relevant for data analysis
+pacman::p_load(
+  tidyverse,
+  here,
+  readr,
+  readxl,
+  gratia,
+  mgcv,
+  forcats,
+  ggpubr,
+  RColorBrewer,
+  broom,
+  grid,
+  DHARMa,
+  mgcViz,
+  gridExtra,
+  viridis, 
+  modelsummary,
+  gratia, 
+  broom,
+  tidyverse,
+  DHARMa,
+  mgcv,
+  gratia,
+  mgcViz
+)
+
+# function for the temperature only GAMs with all run as expected
+source("scripts/functions/predictions_function.R")
+
+```
+
+# Here modify parameters and then run scripts below to produce the following outputs
+
+1. Fit models and save all objects
+2. Plots for gamchecks
+3. Plot of response curves for all species
+4. Summary tables of model for all species
+
+```{r}
+
+# LOAD TESTING PARAMETERS
+model_run = 'run_01052025_depth'
+
+# LOAD DATA
+df_models_final <- readRDS('data/df_models_final_ELECTRO.rds')
+
+```
+
+
+# Fit models across multiple k-values
+```{r}
+
+# x <- 'Rutilus_rutilus' # TEST CODE WITH ONE SPECIES
+
+lapply(c(3), function(set_k){
+  
+  # save outputs to folder
+  output_folder <- paste0('outputs/', model_run, '_electro', '_k=', set_k)
+  dir.create(output_folder, recursive = T)
+  
+  # FIT ALL GAMS
+  
+  all_gams <- lapply(unique(df_models_final$Species), function(x){
+  
+  tryCatch({
+  print(x)
+  
+  model_data <- df_models_final %>% 
+    filter(Species == x) %>% 
+    mutate(fProtocol = as.factor(Protocol), 
+           fLake = as.factor(Lake))
+  model_type <- unique(model_data$model_type)
+  lake_random <- unique(model_data$lake_random)
+  
+  if(model_type == 'bin' & lake_random == F){
+  # binomial model
+    gam_output <- gam(data = model_data, Presence ~ s(mean_last_7days, k = set_k) + s(Depth_sample, k = set_k) +
+                            s(fProtocol, bs = 're'), family = binomial)
+  }
+  if(model_type == 'zip'& lake_random == F){
+  # zero-inflated poisson model
+    gam_output <- gam(data = model_data, Abundance ~ s(mean_last_7days, k = set_k) + s(Depth_sample, k = set_k) +
+                    s(fProtocol, bs = 're'), family = ziP())
+  }
+  if(model_type == 'bin' & lake_random == T){
+  # binomial model
+    gam_output <- gam(data = model_data, Presence ~ s(mean_last_7days, k = set_k) + s(Depth_sample, k = set_k) +
+                            s(fProtocol, bs = 're') + s(fLake, bs = 're'), family = binomial)
+  }
+  if(model_type == 'zip'& lake_random == T){
+  # zero-inflated poisson model
+    gam_output <- gam(data = model_data, Abundance ~ s(mean_last_7days, k = set_k) + s(Depth_sample, k = set_k) +
+                    s(fProtocol, bs = 're') + s(fLake, bs = 're'), family = ziP())
+  }
+
+  return(gam_output)
+  
+  }, error = function(e){NA})
+  
+})
+  
+  names(all_gams) <- unique(df_models_final$Species)
+
+  # print which species failed
+  is.na(all_gams) %>% sum
+  writeLines(unique(df_models_final$Species)[which(is.na(all_gams))], file.path(output_folder, "missing_species.txt"))
+
+  ## save all the gams
+  saveRDS(all_gams[which(!is.na(all_gams))], paste0(output_folder, 'all_gams.RDS'))
+  
+  #### PLOT SIMULATION OUTPUT AS VALIDATION OF MODEL STRUCTURE
+
+  gam_check_folder <- file.path(output_folder, 'gam_check')
+
+  dir.create(gam_check_folder, recursive = T)
+
+  lapply(names(all_gams), function(x){tryCatch({
+
+        # prepare residuals
+        simulationOutput <- simulateResiduals(fittedModel = all_gams[[x]], plot = F)
+        tiff(paste(gam_check_folder, '/', x, ".tiff", sep = ""), width = 800, height = 600)
+        print(plot(simulationOutput))
+        dev.off()
+        
+        }, error = function(e) NA)
+    
+    })
+
+
+  ##### GET PREDICTIONS FOR TEMPERATURE
+
+  model_temp <- expand.grid(mean_last_7days = seq(
+    from = min(df_models_final$mean_last_7days, na.rm = TRUE),
+    to = max(df_models_final$mean_last_7days, na.rm = TRUE), by = 0.02),
+    fProtocol = 'new_protocol', 
+    fLake = 'new_lake')
+
+  # get predictions across model table (model_temp)
+  preds <- lapply(names(all_gams), function(x){tryCatch({
+    
+    sp_depth = df_models_final %>% filter(Species == x, Presence == 1) %>% pull(Depth_sample) %>% mean
+  
+    pred_x <- predict(all_gams[[x]], data.frame(model_temp, Depth_sample = sp_depth), exclude = c('fProtocol', 'fLake'), type = "response", se = T)
+
+  }, error = function(e) list(fit = NA, se.fit = NA))
+    
+    })
+
+  # process outputs from lapply look
+  all_preds <- data.frame(lapply(preds, function(x) x$fit))
+  names(all_preds) <- names(all_gams)
+  
+  all_se <- data.frame(lapply(preds, function(x) x$se.fit))
+  names(all_se) <- names(all_gams)
+  
+  # bind with predicted values
+  all_preds_long <- bind_cols(model_temp, all_preds) %>% 
+    pivot_longer(5:ncol(.))
+  
+  all_se_long <- bind_cols(model_temp, all_se) %>% 
+    pivot_longer(5:ncol(.), values_to = 'se')
+  
+  # join together
+  all_preds_long <- left_join(all_preds_long, all_se_long)
+
+  
+  # Calculate the realized limits of the species based on observations
+  thermal_limits <- df_models_final %>% 
+    filter(Presence == 1) %>% 
+    group_by(Species) %>% 
+    summarise(
+      across(mean_last_7days, list(min = ~min(.x, na.rm = TRUE),
+                                   max = ~max(.x, na.rm = TRUE)))
+    ) %>% 
+    rename(name = Species)
+  
+  # Join in limits
+  all_preds_long_limits <- left_join(thermal_limits, all_preds_long)
+  
+  # Add logic to colour line depending on realized limits
+  all_preds_long_limits <- all_preds_long_limits %>% 
+    mutate(colour = case_when(mean_last_7days > mean_last_7days_min & mean_last_7days < mean_last_7days_max ~ 'inside', T ~ 'outside'))
+  
+  # Add identifier if predictions are for with or without electrofishing data
+  all_preds_long_limits <- all_preds_long_limits %>% 
+    mutate(including_electro = T)
+  
+  # Save output
+    saveRDS(all_preds_long_limits %>% 
+              mutate(k = set_k), 
+            paste0(output_folder, '/temperature_predictions.RDS'))
+
+  
+  png(filename = paste0(output_folder, '/thermal_response_curves', '_k=', set_k, '.png'), res = 300, height = 3000, width = 4000)
+  print(ggplot(data = all_preds_long_limits %>% 
+                 filter(!grepl('Salvelinus_sp_Pro', name))) + 
+    geom_line(aes(x = mean_last_7days, y = value, group = name, col = colour)) + 
+    scale_colour_manual(values = c('red', 'gray50')) + 
+    facet_wrap(~name, scales = 'free_y') + 
+    theme_bw() + 
+    theme(strip.background = element_blank(), 
+          strip.text = element_text(size = 7)))
+  dev.off()
+
+
+  #### MODEL DEPTH PREDICTIONS
+  
+  ##### GET PREDICTIONS AS STANDARDIZED OBJECT FOR PLOTTING WITH GGPLOT2
+
+model_depth <- expand.grid(
+  Depth_sample = seq(
+    from = min(df_models_final$Depth_sample, na.rm = TRUE),
+    to = max(df_models_final$Depth_sample, na.rm = TRUE), 
+    by = 0.02),
+  mean_last_7days = mean(df_models_final$mean_last_7days, na.rm = TRUE),
+  fProtocol = 'new_protocol', 
+  fLake = 'new_lake'
+)
+
+# get predictions across model table (model_depth)
+preds <- lapply(names(all_gams), function(x) {
+  tryCatch({
+    pred_x <- predict(
+      all_gams[[x]], 
+      model_depth, 
+      exclude = c('fProtocol', 'fLake'), 
+      type = "response", 
+      se = TRUE
+    )
+  }, error = function(e) list(fit = NA, se.fit = NA))
+})
+  
+# process outputs from lapply loop
+all_preds <- data.frame(lapply(preds, function(x) x$fit))
+names(all_preds) <- names(all_gams)
+
+all_se <- data.frame(lapply(preds, function(x) x$se.fit))
+names(all_se) <- names(all_gams)
+
+# bind with predicted values
+all_preds_long <- bind_cols(model_depth, all_preds) %>% 
+  pivot_longer(5:ncol(.))
+
+all_se_long <- bind_cols(model_depth, all_se) %>% 
+  pivot_longer(5:ncol(.), values_to = 'se')
+
+# join together
+all_preds_long <- left_join(all_preds_long, all_se_long)
+
+# Calculate the realized limits of the species based on observations
+depth_limits <- df_models_final %>% 
+  filter(Presence == 1) %>% 
+  group_by(Species) %>% 
+  summarise(
+    across(Depth_sample, list(min = ~min(.x, na.rm = TRUE),
+                              max = ~max(.x, na.rm = TRUE)))
+  ) %>% 
+  rename(name = Species)
+
+# Join in limits
+all_preds_long_limits <- left_join(depth_limits, all_preds_long)
+
+# Add logic to colour line depending on realized limits
+all_preds_long_limits <- all_preds_long_limits %>% 
+  mutate(colour = case_when(
+    Depth_sample > Depth_sample_min & Depth_sample < Depth_sample_max ~ 'inside', 
+    TRUE ~ 'outside'
+  ))
+
+# Add identifier if predictions are for with or without electrofishing data
+all_preds_long_limits <- all_preds_long_limits %>% 
+  mutate(including_electro = TRUE)
+
+# Save output
+saveRDS(all_preds_long_limits %>% 
+          mutate(k = set_k), 
+        paste0(output_folder, '/depth_predictions.RDS'))
+
+# Plotting
+png(filename = paste0(output_folder, '/depth_response_curves', '_k=', set_k, '.png'), res = 300, height = 3000, width = 4000)
+print(ggplot(data = all_preds_long_limits %>% 
+               filter(!grepl('Salvelinus_sp_Pro', name))) + 
+  geom_line(aes(x = Depth_sample, y = value, group = name, col = colour)) + 
+  scale_colour_manual(values = c('red', 'gray50')) + 
+  facet_wrap(~name, scales = 'free_y') + 
+  theme_bw() + 
+  theme(strip.background = element_blank(), 
+        strip.text = element_text(size = 7)))
+dev.off()
+
+
+  #### SAVE SUMMARIES OF MODEL PROPERTIES
+  
+  tidy(all_gams[[1]])
+  
+  tidy_output <- lapply(names(all_gams), function(x){tryCatch({
+    
+    tidy_x <- tidy(all_gams[[x]])
+    tidy_x$dev.exp <- signif(summary(all_gams[[x]])$dev.expl[1],2)
+    tidy_x$aic <- all_gams[[x]]$aic
+    tidy_x$species_name <- x
+    tidy_x
+  }, error = function(e) NULL)
+    
+  })
+
+  table_model_summaries <- bind_rows(tidy_output) %>% 
+    relocate(species_name)
+  
+  write_csv(table_model_summaries, 
+            file = paste0(output_folder, '/model_summaries.csv'))
+  
+  hist(unique(table_model_summaries$dev.exp))
+  write_csv(table_model_summaries %>% 
+                select(species_name, dev.exp) %>% 
+                unique() %>% 
+                arrange(dev.exp), file = paste0(output_folder, '/model_devexp.csv')) # really good model deviance explained
+
+  
+    hist(unique(table_model_summaries$aic))
+  write_csv(table_model_summaries %>% 
+                select(species_name, aic) %>% 
+                unique() %>% 
+                arrange(aic), file = paste0(output_folder, '/model_aic.csv')) # really good model deviance explained
+
+#### END OF LOOPING ACROSS K VALUES
+
+})
+
+```
+
+
+# Compare response curves across common species 
+
+```{r}
+
+# generate subset of species with abundant data to quantify seperate response curves
+many_records <- df_models_final %>% 
+  group_by(Species) %>% 
+  filter(Presence == 1) %>% 
+  tally %>% 
+  arrange(desc(n)) 
+
+# read in both response curve sets
+preds_no_depth <- readRDS("outputs/run_01052025_electro_k=3/temperature_predictions.RDS") %>% mutate(depth = 'no_depth')
+preds_with_depth <- readRDS("outputs/run_01052025_depth_electro_k=3/temperature_predictions.RDS") %>% mutate(depth = 'with_depth')
+
+# combine the depth and no depth models
+preds_combined <- bind_rows(
+  preds_no_depth, 
+  preds_with_depth
+) %>% 
+  # join and select only species with > 50 records
+  left_join(many_records %>% filter(n>=50), 
+  ., 
+  by = c('Species' = 'name'))
+
+# process names for facets
+preds_combined <- 
+  preds_combined %>% 
+  mutate(Species = gsub('_', ' ', Species))
+
+png(filename = 'figures/thermal_response_curves_DepthComparison_k=3.png', res = 300, height = 3000, width = 3000)
+print(ggplot(data = preds_combined %>% 
+                 mutate(value = case_when(value > 500 ~ 500, T ~ value))) + 
+    geom_line(aes(x = mean_last_7days, y = value, group = depth, col = depth, alpha = log10(n))) + 
+    scale_colour_manual(name = 'depth in model', values = c('red', 'blue')) + 
+    facet_wrap(~Species, scales = 'free_y', ncol = 5) + 
+    theme_bw() + 
+    theme(strip.background = element_blank(), 
+          strip.text = element_text(size = 7),
+          legend.position = 'bottom'))+
+    xlab('Temperature') + 
+    ylab('Predicted abundance')
+dev.off()
+
+```
+
+
+# Plot which types of models have greater deviance explained 
+```{r}
+
+dev_nodepth <- read_csv('outputs/run_01052025_electro_k=3/model_devexp.csv') %>% rename(dev.exp.nodepth = dev.exp)
+dev_depth   <- read_csv('outputs/run_01052025_depth_electro_k=3/model_devexp.csv') %>% rename(dev.exp.depth = dev.exp)
+
+dev_exp_data <- left_join(dev_nodepth, dev_depth, by = 'species_name') %>% 
+  mutate(delta_dev.exp = dev.exp.depth - dev.exp.nodepth) %>% 
+  left_join(., many_records, by = c('species_name' = 'Species'))
+
+png(filename = 'figures/dev_exp_withDepth_k=3.png', res = 300, height = 2000, width = 2000)
+ggplot(data = dev_exp_data) + 
+  geom_histogram(aes(x = delta_dev.exp*100)) + 
+  theme_bw() + 
+  geom_vline(aes(xintercept = 0)) + 
+  xlab('Gain in deviance explained (%) \n when including depth') + 
+  ylab('n. species') + 
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 5))
+dev.off()
+
+summary(dev_exp_data)
+
+
+```
+
+
+# Read in AIC comparisons
+```{r}
+aic_nodepth <- read_csv('outputs/run_01052025_electro_k=3/model_aic.csv') %>% rename(aic.nodepth = aic)
+aic_depth   <- read_csv('outputs/run_01052025_depth_electro_k=3/model_aic.csv') %>% rename(aic.depth = aic)
+
+
+aic_data <- left_join(aic_nodepth, aic_depth, by = 'species_name') %>% 
+  mutate(delta_aic = aic.depth - aic.nodepth) %>% 
+  left_join(., many_records, by = c('species_name' = 'Species'))
+
+aic_data %>% 
+  filter(delta_aic < -2)
+
+png(filename = 'figures/aic_withDepth_k=3.png', res = 300, height = 2000, width = 2000)
+ggplot(data = aic_data %>% 
+         mutate(delta_aic = case_when(delta_aic < -50 ~ -50, T ~ delta_aic))) + 
+  geom_histogram(aes(x = delta_aic), bins = 50) + 
+  theme_bw() + 
+  geom_vline(aes(xintercept = 0)) + 
+  geom_vline(aes(xintercept = -2), col = 'red') + 
+  xlab('Difference in AIC \n when including depth') + 
+  ylab('n. species') + 
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 5))
+dev.off()
+
+```
+
+
+# Plot the ffd from both depth and no-depth models
+
+```{r}
+
+## Get ffd for depth based models
+preds_no_depth <- readRDS("outputs/run_01052025_electro_k=3/temperature_predictions.RDS") %>% mutate(depth = 'no_depth')
+preds_with_depth <- readRDS("outputs/run_01052025_depth_electro_k=3/temperature_predictions.RDS") %>% mutate(depth = 'with_depth')
+
+# combine the depth and no depth models
+preds_combined_v2 <- bind_rows(
+  preds_no_depth, 
+  preds_with_depth
+) %>% 
+  left_join(many_records, 
+  ., 
+  by = c('Species' = 'name')) %>% 
+  rename(name = Species)
+
+
+# get the ffd for all species and depth models
+all_ffd_derivs <- preds_combined_v2 %>% 
+  group_by(name, k, including_electro, depth) %>% 
+  filter(colour == 'inside') %>% 
+  mutate(value = scales::rescale(value)) %>% 
+  # estimate next values
+  mutate(value_lead = lead(value), 
+         mean_last_7days_lead = lead(mean_last_7days)) %>% 
+  # remove end point
+  filter(!is.na(value_lead), !is.na(mean_last_7days_lead)) %>% 
+  # forward finite difference
+  mutate(ffd = (value_lead - value) / (mean_last_7days_lead - mean_last_7days), 
+         ffd_per_0.1degree = (ffd*(1/0.2)) * 0.1)
+
+
+# pivot to get the ffs per "model depth type"
+ffd_comparison <- all_ffd_derivs %>% 
+  ungroup() %>% 
+  select(name, n, ffd_per_0.1degree, depth, mean_last_7days) %>% 
+  pivot_wider(values_from = ffd_per_0.1degree, names_from = depth)
+  
+ggplot(data = ffd_comparison %>% 
+         group_by(name) %>% 
+         slice_sample(n=100)) + 
+  geom_point(aes(x = no_depth, y = with_depth, col = log10(n))) + 
+  facet_wrap(~name, scales = 'free') + 
+  scale_color_viridis_c()
+
+# get the rank correlations between different model types
+rank_cor <- ffd_comparison %>% 
+  arrange(name) %>% 
+  group_by(name) %>%
+  filter(!is.na(with_depth), !is.na(no_depth)) %>% 
+  nest() %>% 
+  mutate(rank = purrr::map(data, ~broom::tidy(cor.test(.$no_depth, .$with_depth, method = 'spearman')))) %>% 
+  unnest(rank)
+
+# find tendency of rank correlations
+rank_cor$estimate %>% summary
+hist(rank_cor$estimate)
+
+# Compute summary stats
+mean_val <- mean(rank_cor$estimate, na.rm = TRUE)
+median_val <- median(rank_cor$estimate, na.rm = TRUE)
+
+# histogram of spearmans rank estimates
+png(filename = 'figures/ffd_spearmans_rank.png', res = 300, height = 2000, width = 2000)
+ggplot(data = rank_cor, aes(x = estimate)) + 
+  geom_histogram(
+    bins = 30, 
+    fill = "gray50", 
+    color = "white"
+  ) +
+  geom_vline(aes(xintercept = mean_val), color = "black", linetype = "dashed", size = 1) +
+  geom_vline(aes(xintercept = median_val), color = "black", linetype = "solid", size = 1) +
+  annotate("text", x = mean_val-0.25, y = 30, label = paste0("Mean=", signif(mean_val,2)), 
+           vjust = -0.5, hjust = -0.1, color = "black", size = 3) +
+  annotate("text", x = median_val-0.25, y = 30, label = paste0("Median=", signif(median_val,2)), 
+           vjust = -0.5, hjust = -0.1, color = "black", size = 3) +
+  theme_bw(base_size = 12) +
+  xlab("Spearman's rank estimate") +
+  ylab("Number of species") +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    panel.grid = element_blank()
+  )
+dev.off()
+
+# plot against number of records
+rank_cor <- rank_cor %>% 
+  unnest(data) %>% 
+  select(name, n, estimate:alternative) %>% 
+  unique()
+
+
+round((table(rank_cor$estimate > 0) / length(rank_cor$estimate)) * 100)
+round((table(rank_cor$estimate > 0.9) / length(rank_cor$estimate)) * 100)
+
+# Rescale estimate to [0,1] since quasibinomial expects it
+rank_cor_trans <- rank_cor %>%
+  mutate(log_n = log10(n), 
+         estimate_scaled = (estimate + 1) / 2)
+
+# Step 2: Fit a glm with quasibinomial family
+model <- glm(estimate_scaled ~ log_n, data = rank_cor_trans, family = quasibinomial())
+
+# Step 3: Check summary to assess significance
+summary(model)
+
+# Plot result
+png(filename = 'figures/ffd_depth_nodepth_comparison.png', res = 300, height = 1500, width = 1500)
+ggplot(rank_cor_trans, aes(x = log_n, 
+                           y = estimate_scaled)) + 
+  geom_point() + 
+  stat_smooth(method = "glm", method.args = list(family = "quasibinomial"), lty = 2, se = F) +
+  scale_y_continuous(
+    name = "Correlation estimate",
+    breaks = seq(0, 1, 0.1),
+    labels = function(x) round(x * 2 - 1, 2)  # Back-transform to [-1, 1]
+  ) +
+  xlab("log10(n)") +
+  theme_bw()
+dev.off()
+
+
+```
+
+
+
+```{r}
+ 
+# find those species with negative relationships between thermal ffd when including depth and excluding depth
+
+library(ggh4x)  # for custom strip backgrounds
+library(scales) # for rescale()
+
+# Prepare neg_rank as before
+neg_rank <- rank_cor %>%
+  #filter(estimate < 0) %>%
+  mutate(Species = gsub('_', ' ', name)) %>%
+  arrange(estimate)
+
+species_estimates <- rank_cor %>%
+  mutate(Species = gsub('_', ' ', name)) %>%
+  select(Species, estimate)
+
+# Add n (presence records) from many_records to species_estimates (assuming many_records has Species and n)
+# Join presence records 'n' to preds_combined and then make label
+
+preds_combined <- bind_rows(preds_no_depth, preds_with_depth) %>%
+  rename(Species = name) %>% 
+  left_join(many_records, by = "Species") %>%      # make sure many_records has Species and n
+  mutate(Species = gsub('_', ' ', Species)) %>%
+  left_join(species_estimates, by = "Species") %>%
+  filter(Species %in% neg_rank$Species) %>%
+  mutate(
+    value = pmin(value, 500),
+    Species = factor(Species, levels = unique(neg_rank$Species)),
+    facet_label = paste0(Species, ", n=", n)     # combine species name and presence count
+  )
+
+# Compute x and y ranges for rectangles per facet label
+rect_data <- preds_combined %>%
+  group_by(facet_label, estimate) %>%
+  summarise(
+    xmin = min(mean_last_7days),
+    xmax = max(mean_last_7days),
+    ymin = min(value),
+    ymax = max(value),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    fill_color = scales::col_numeric(
+      palette = c("red", "white", "blue"),
+      domain = range(rank_cor$estimate, na.rm = TRUE)
+    )(estimate)
+  )
+
+png(filename = 'figures/thermal_response_curves_DepthComparison_k=3_RANK.png', res = 300, height = 3000, width = 3000)
+
+print(
+  ggplot() +
+    geom_rect(data = rect_data,
+              aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = fill_color),
+              inherit.aes = FALSE, alpha = 0.3) +
+    scale_fill_identity() +
+    geom_line(data = preds_combined,
+              aes(x = mean_last_7days, y = value, group = depth, color = depth, lty = depth)) +
+    scale_colour_manual(name = 'Depth in model', values = c('gray30', 'black')) +
+    scale_linetype(name = 'Depth in model') + 
+    facet_wrap(~facet_label, scales = 'free_y', ncol = 5) +
+    theme_bw() +
+    theme(
+      strip.background = element_blank(),
+      strip.text = element_text(size = 7),
+      legend.position = 'bottom'
+    ) +
+    xlab('Temperature') +
+    ylab('Predicted abundance')
+)
+
+dev.off()
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
