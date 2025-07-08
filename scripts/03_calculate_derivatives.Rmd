@@ -232,7 +232,7 @@ source('scripts/functions/functions.R')
 # read in object
 all_ffd_derivs <- readRDS('data/final_ffd.RDS')
 
-# sim
+# simple
 all_ffd_derivs |>
   select(mean_last_7days, ffd_per_0.1degree, name)
 

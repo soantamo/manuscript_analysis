@@ -1,0 +1,478 @@
+---
+title: "05_species_contributions"
+author: "Conor Waldock"
+date: "`r Sys.Date()`"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+
+# packages relevant for data analysis
+pacman::p_load(
+    data.table,
+  tidyverse,
+  here,
+  readr,
+  readxl,
+  gratia,
+  mgcv,
+  forcats,
+  ggpubr,
+  RColorBrewer,
+  broom,
+  grid,
+  DHARMa,
+  mgcViz,
+  gridExtra,
+  viridis, 
+  modelsummary,
+  gratia, 
+  broom,
+  tidyverse,
+  DHARMa,
+  mgcv,
+  gratia,
+  mgcViz
+)
+
+```
+
+
+## Set up
+
+Files are produced in earlier scripts and some of the code is copied across for similar purposes, especially from script 3 used to calculate derivatives and response diversity metrics. 
+
+```{r}
+
+# Read in RD functions used
+source('scripts/functions/functions.R')
+
+# Read in final ffd data
+all_ffd_derivs <- readRDS('data/final_ffd.RDS')
+
+# Bound extreme values as before
+all_ffd_derivs <- all_ffd_derivs %>% 
+  filter(k == 3, 
+         including_electro == T) %>% 
+  mutate(ffd_per_0.1degree = case_when(ffd_per_0.1degree < -0.1 ~ -0.1, 
+                                       ffd_per_0.1degree > 0.1 ~ 0.1, 
+                                       T ~ ffd_per_0.1degree))
+
+# Read in species occurrences across lakes
+species_occ_lakes <-  read_csv("data/taxonomy_May2025/species_lake_list_raw_EDITED.csv") %>% 
+  select(Species_ecotype, Lake, Swisswide_biogeographic_status) %>% 
+  unique() %>%
+  rename(Species = Species_ecotype)
+
+```
+
+## Calculate species level contributions at each temperature bin per lake
+
+First off establish the function and the procedure per one single lake and temperature bin
+
+```{r}
+
+install.packages("progress")
+library(progress)
+
+
+# single lake
+lake <- unique(species_occ_lakes$Lake)[10]
+
+run_sp_contributions <- lapply(unique(species_occ_lakes$Lake), function(lake){
+  
+  # get species present in lakes
+  species_lakes <- species_occ_lakes %>% 
+    filter(Lake == lake) %>% 
+    pull(Species) %>% 
+    unique()
+  
+  # get all temperatures to loop through
+  all_temps <- all_ffd_derivs %>% 
+      pull(mean_last_7days) %>% 
+      unique() %>% 
+      sort() 
+  
+    # Initialize progress bar for temps
+    pb <- progress_bar$new(
+      format = "  Processing lake :lake [:bar] :percent ETA: :eta",
+      total = length(all_temps),
+      clear = FALSE,
+      width = 60
+    )
+
+  
+  # LOOP OVER TEMPERATURE SUBSETS
+  lapply(all_temps, function(temp){
+    
+   # update progress
+   pb$tick(tokens = list(lake = lake))
+    
+      temp_subset <- all_ffd_derivs %>% filter(mean_last_7days == temp)
+      
+      if (sum(species_lakes %in% temp_subset$name) <= 2) return(NULL)
+  
+      # filter thermal responses to species present in different lakes
+      wide_lake_ffd <- temp_subset %>% 
+        ungroup() %>% 
+        filter(name %in% species_lakes) %>% 
+        # filter(colour == 'inside') %>% 
+        select(name, mean_last_7days, ffd_per_0.1degree, k, including_electro) %>% 
+        unique() %>% 
+        # pivot to be wider
+        pivot_wider(names_from = name, values_from = ffd_per_0.1degree)
+  
+      # species in lake strata
+      species_lakes_strata <- species_lakes[species_lakes %in% names(wide_lake_ffd)]
+  
+       # loop through dropping one species at a time
+       # Define species columns, assuming 'species_lakes' is a character vector of column names
+       species_cols <- species_lakes_strata
+       
+       if(length(species_cols) <= 2) return(NULL)
+       
+       # LOOP OVER EACH SPECIES WITHIN TEMP SUBSET
+       lapply(species_cols, function(x){
+         
+          sp_dropped <- species_cols[which(!species_cols %in% x)]
+            
+          # Convert to data.table
+         wide_lake_dt <- as.data.table(wide_lake_ffd)
+          
+          # Perform the grouped operation
+          result <- wide_lake_dt[, .(n_sp = length(na.omit(as.numeric(unlist(.SD))))+1,
+                                     dissimilarity_ross = resp_div(na.omit(as.numeric(unlist(.SD))), sign_sens = F), 
+                                     divergence_ross    = resp_div(na.omit(as.numeric(unlist(.SD))), sign_sens = T),
+                                     mean_ffd = mean(na.omit(as.numeric(unlist(.SD)))),
+                                     sd_ffd = sd(na.omit(as.numeric(unlist(.SD))))
+                                     ), 
+                                  by = .(k, including_electro, mean_last_7days), 
+                                  .SDcols = sp_dropped]
+          
+          # Add lake column and the species_dropped column
+          result[, c("lake", "species_dropped") := .(lake, x)]
+          
+          result
+          
+          }) %>% 
+         
+         # bind outputs
+         bind_rows
+       
+       }) %>% 
+    
+    # capture results
+    bind_rows
+  
+  })
+
+# bind species contributions
+sp_con_rd <- bind_rows(run_sp_contributions)
+
+saveRDS(sp_con_rd, 'data/species_contributions_respdiv.rds')
+
+```
+
+Next we need to combine the calculations of response diversity with each species removed to the mean response diversity when ANY given species is removed
+
+```{r}
+
+# Load the data.table containing species contributions
+sp_con_rd <- readRDS('data/species_contributions_respdiv.rds')
+
+# Define the columns that you want to work with (the response metrics)
+rd_cols <- c('dissimilarity_ross', 'divergence_ross', 'mean_ffd', 'sd_ffd')
+
+# Step 1: Compute group-wise means for each of the response columns
+# Grouping is done by 'k', 'including_electro', 'mean_last_7days', and 'lake'
+# New columns like 'mean_dissimilarity_ross' will be created
+sp_con_rd[ , 
+           paste0("mean_", rd_cols) := lapply(.SD, mean),
+           by = .(k, including_electro, mean_last_7days, lake), 
+           .SDcols = rd_cols]
+
+# Step 2: Subtract group means from original values for each response column
+# Resulting columns will be named like 'dissimilarity_ross_diff'
+# This calculates the deviation from the group mean (i.e., centered values)
+sp_con_rd[, 
+          paste0(rd_cols, "_diff") := Map(`-`, 
+                                          .SD[, rd_cols, with = FALSE],
+                                          .SD[, paste0("mean_", rd_cols), with = FALSE]), 
+          .SDcols = c(rd_cols, paste0('mean_', rd_cols))]
+
+```
+
+
+# Contributions per lake overall 
+
+Next make some plots summarising how the variation in change in species contributions looks across different lakes.
+
+```{r}
+
+# convert to dplyr for more intuitive code
+sp_lake_rd_agg <- sp_con_rd %>% 
+  as_tibble() %>% 
+  group_by(species_dropped, lake) %>% 
+  summarise(across(dissimilarity_ross_diff:sd_ffd_diff, c(meanLS = mean, sdLS = sd)))
+  
+test <- c('sd_ffd_diff_meanLS')
+
+lake_species_heatmap <- function(var, data_set){
+  
+  # limits
+  lim <- max(abs(c(data_set %>% pull(get(var)) %>% quantile(., 0.05, na.rm = T), data_set %>% pull(get(var)) %>% quantile(., 0.95, na.rm = T))))
+  
+  ggplot(data = data_set %>%
+  group_by(species_dropped) %>%
+  mutate(
+    species_mean = mean(get(var), na.rm = TRUE)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    species_dropped = fct_reorder(species_dropped, species_mean)
+  ) %>%
+  select(-species_mean)) + 
+  geom_tile(aes(y = species_dropped, x = lake, fill = get(var))) + 
+  scale_fill_gradient2(name = var,
+                         low = "blue", mid = "gray50", high = "red",
+                        midpoint = 0, limits = c(-lim, lim), oob = scales::squish) + 
+    theme_bw() + 
+    theme(panel.grid = element_blank(), 
+          axis.text.x = element_text(angle = 45, hjust = 1)) + 
+    ylab(NULL) + 
+    xlab(NULL)
+  }
+
+
+vars <- c('dissimilarity_ross_diff_meanLS', 'dissimilarity_ross_diff_sdLS', 'divergence_ross_diff_meanLS', 'divergence_ross_diff_sdLS', 
+  'mean_ffd_diff_meanLS', 'mean_ffd_diff_sdLS', 'sd_ffd_diff_meanLS', 'sd_ffd_diff_sdLS')
+
+lapply(vars, function(x) lake_species_heatmap(x, sp_lake_rd_agg))
+
+
+```
+
+
+
+# Expressing difference relative to when species is included
+
+We can also express the species contribution based on the community when it is include vs. excluded. 
+
+```{r}
+
+dir.create('figures/species_contributions/', recursive = T)
+
+# Read in the original response diversity information
+response_diversity <- readRDS('data/response_diversity.rds')
+
+# rename 
+response_diversity <- response_diversity %>% 
+  rename(diss_com = dissimilarity_ross, 
+         div_com = divergence_ross, 
+         mean_com = mean_ffd, 
+         sd_com = sd_ffd)
+
+# Load the data.table containing species contributions
+sp_con_rd <- readRDS('data/species_contributions_respdiv.rds')
+
+# get response diversity contributions compared with including species
+contributions_net <- left_join(sp_con_rd, response_diversity) %>% 
+  filter(!is.na(div_com)) %>% 
+  # contributions are positive if when you drop the species you lose rd 
+  mutate(diss_contr = diss_com - dissimilarity_ross, 
+         div_contr = div_com - divergence_ross, 
+         mean_contr = mean_com - mean_ffd,
+         sd_contr = sd_com - sd_ffd) %>% 
+  as_tibble() %>% 
+  group_by(species_dropped, lake) %>% 
+  summarise(across(diss_contr:sd_contr, c(meanLS = mean, sdLS = sd)))
+
+# check out heatmaps for these new variables
+mean_contr_plots <- lapply(c('diss_contr_meanLS', 'div_contr_meanLS', 'mean_contr_meanLS', 'sd_contr_meanLS'), 
+       function(x) lake_species_heatmap(x, contributions_net))
+
+png('figures/species_contributions/diss_allDepth.png', res = 300, height = 3500, width = 3500)
+mean_contr_plots[[1]] + theme(aspect.ratio = 1.5)
+dev.off()
+
+png('figures/species_contributions/div_allDepth.png', res = 300, height = 3500, width = 3500)
+mean_contr_plots[[2]] + theme(aspect.ratio = 1)
+dev.off()
+
+png('figures/species_contributions/mean_allDepth.png', res = 300, height = 3500, width = 3500)
+mean_contr_plots[[3]] + theme(aspect.ratio = 1)
+dev.off()
+
+png('figures/species_contributions/sd_allDepth.png', res = 300, height = 3500, width = 3500)
+mean_contr_plots[[4]] + theme(aspect.ratio = 1)
+dev.off()
+
+
+sd_contr_plots <- lapply(c('diss_contr_sdLS', 'div_contr_sdLS', 'mean_contr_sdLS', 'sd_contr_sdLS'), 
+       function(x) lake_species_heatmap(x, contributions_net))
+
+```
+
+
+# Assess patterns across temperature as in other analyses
+
+```{r}
+
+# join in raw response diversities and species contributions and aggregate across temperature bins
+contributions_net_tempbin <- left_join(sp_con_rd, response_diversity) %>% 
+  # remove communities without estimates
+  filter(!is.na(div_com)) %>% 
+  # contributions are positive if when you drop the species you lose rd 
+  mutate(diss_contr = diss_com - dissimilarity_ross, 
+         div_contr = div_com - divergence_ross, 
+         mean_contr = mean_com - mean_ffd,
+         sd_contr = sd_com - sd_ffd) %>% 
+  as_tibble() %>% 
+  # Create temperature bins 
+  mutate(temp_bin = paste0('temp_', sprintf("%02d", plyr::round_any(mean_last_7days, accuracy = 5)))) %>% 
+  # Group the data by the 'lake' column
+  group_by(species_dropped, lake, temp_bin) %>% 
+  # For all columns from 'dissimilarity_ross' to 'sd_ffd', compute the mean
+  # 'na.rm = T' ensures that NA values are ignored during the mean calculation
+  summarise(across(diss_contr:sd_contr, c(meanLSD = mean, sdLSD = sd))) %>% 
+  filter(temp_bin != 'temp_25')
+
+
+# create lake species heatmaps per depthbin
+
+lake_species_depth_heatmap <- function(var, data_set){
+  
+  # limits
+  lim <- max(abs(c(data_set %>% pull(get(var)) %>% quantile(., 0.05, na.rm = T), data_set %>% pull(get(var)) %>% quantile(., 0.95, na.rm = T))))
+  
+  ggplot(data = data_set %>%
+  group_by(species_dropped) %>%
+  mutate(
+    species_mean = mean(get(var), na.rm = TRUE)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    species_dropped = fct_reorder(species_dropped, species_mean)
+  ) %>%
+  select(-species_mean)) + 
+  geom_tile(aes(y = species_dropped, x = lake, fill = get(var))) + 
+  scale_fill_gradient2(name = var,
+                         low = "blue", mid = "gray50", high = "red",
+                        midpoint = 0, limits = c(-lim, lim), oob = scales::squish) + 
+    theme_bw() + 
+    theme(panel.grid = element_blank(), 
+          axis.text.x = element_text(angle = 45, hjust = 1)) + 
+    ylab(NULL) + 
+    xlab(NULL)  +
+    facet_wrap(~temp_bin)
+}
+
+mean_contr_tempbin_plots <- lapply(c('diss_contr_meanLSD', 'div_contr_meanLSD', 'mean_contr_meanLSD', 'sd_contr_meanLSD'), 
+       function(x) lake_species_depth_heatmap(x, contributions_net_tempbin))
+
+
+png('figures/species_contributions/diss_tempBin.png', res = 300, height = 4500, width = 4500)
+mean_contr_tempbin_plots[[1]] 
+dev.off()
+
+png('figures/species_contributions/div_tempBin.png', res = 300, height = 4500, width = 4500)
+mean_contr_tempbin_plots[[2]] 
+dev.off()
+
+png('figures/species_contributions/mean_tempBin.png', res = 300, height = 4500, width = 4500)
+mean_contr_tempbin_plots[[3]] 
+dev.off()
+
+png('figures/species_contributions/sd_tempBin.png', res = 300, height = 4500, width = 4500)
+mean_contr_tempbin_plots[[4]] 
+dev.off()
+
+```
+
+
+
+# Aggregate species response contributions across lakes but keep thermal structure
+
+```{r}
+
+mean_contr_tempbin_nolake_plots <- left_join(sp_con_rd, response_diversity) %>% 
+  # remove communities without estimates
+  filter(!is.na(div_com)) %>% 
+  # contributions are positive if when you drop the species you lose rd 
+  mutate(diss_contr = diss_com - dissimilarity_ross, 
+         div_contr = div_com - divergence_ross, 
+         mean_contr = mean_com - mean_ffd,
+         sd_contr = sd_com - sd_ffd) %>% 
+  as_tibble() %>% 
+  # Create temperature bins 
+  mutate(temp_bin = paste0('temp_', sprintf("%02d", plyr::round_any(mean_last_7days, accuracy = 5)))) %>% 
+  # Group the data by the 'lake' column
+  group_by(species_dropped, temp_bin) %>% 
+  # For all columns from 'dissimilarity_ross' to 'sd_ffd', compute the mean
+  # 'na.rm = T' ensures that NA values are ignored during the mean calculation
+  summarise(across(diss_contr:sd_contr, c(meanLSD = ~ mean(.x, na.rm = TRUE), sdLSD = ~ sd(.x, na.rm = TRUE)))) %>% 
+  filter(temp_bin != 'temp_25')
+
+
+species_depth_heatmap <- function(var, data_set){
+  
+  # limits
+  lim <- max(abs(c(data_set %>% pull(get(var)) %>% quantile(., 0.05, na.rm = T), data_set %>% pull(get(var)) %>% quantile(., 0.95, na.rm = T))))
+  
+  ggplot(data = data_set %>%
+  group_by(species_dropped) %>%
+  mutate(
+    species_mean = mean(get(var), na.rm = TRUE)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    species_dropped = fct_reorder(species_dropped, species_mean)
+  ) %>%
+  select(-species_mean)) + 
+    
+  geom_tile(aes(y = species_dropped, x = temp_bin, fill = get(var))) + 
+  scale_fill_gradient2(name = var,
+                         low = "blue", mid = "gray50", high = "red",
+                        midpoint = 0, limits = c(-lim, lim), oob = scales::squish) + 
+    theme_bw() + 
+    theme(panel.grid = element_blank(), 
+          axis.text.x = element_text(angle = 45, hjust = 1)) + 
+    ylab(NULL) + 
+    xlab(NULL) 
+}
+
+species_tempbin_agg_plots_mean <- lapply(c('diss_contr_meanLSD', 'div_contr_meanLSD', 'mean_contr_meanLSD', 'sd_contr_meanLSD'), 
+       function(x) species_depth_heatmap(x, mean_contr_tempbin_nolake_plots))
+
+
+png('figures/species_contributions/diss_tempBin_agg.png', res = 300, height = 4500, width = 2000)
+species_tempbin_agg_plots_mean[[1]] 
+dev.off()
+
+png('figures/species_contributions/div_tempBin_agg.png', res = 300, height = 4500, width = 2000)
+species_tempbin_agg_plots_mean[[2]] 
+dev.off()
+
+png('figures/species_contributions/mean_tempBin_agg.png', res = 300, height = 4500, width = 2000)
+species_tempbin_agg_plots_mean[[3]] 
+dev.off()
+
+png('figures/species_contributions/sd_tempBin_agg.png', res = 300, height = 4500, width = 2000)
+species_tempbin_agg_plots_mean[[4]] 
+dev.off()
+
+
+species_tempbin_agg_plots_sd <- lapply(c('diss_contr_sdLSD', 'div_contr_sdLSD', 'mean_contr_sdLSD', 'sd_contr_sdLSD'), 
+       function(x) species_depth_heatmap(x, mean_contr_tempbin_nolake_plots))
+
+
+
+```
+
