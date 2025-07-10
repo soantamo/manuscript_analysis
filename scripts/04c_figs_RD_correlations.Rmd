@@ -108,8 +108,6 @@ group_richness <- biogeography_swisswide %>%
   pivot_wider(values_from = lake_richness, names_from = lbs_intro, values_fill = 0) %>% 
   ungroup()
   
-
-
 # join lake and group richness to response diversity data
 result <- reduce(list(lake_meta, lake_richness, group_richness), ~ left_join(.x, .y, by = "lake"))
 
@@ -229,6 +227,8 @@ rownames(cor_summary_table) <- NULL
 # View the summary table
 print(cor_summary_table)
 
+write_csv(cor_summary_table, 'figures/response_diversity_Figs/cor_biog_temp.csv')
+
 ```
 
 ## Assessing response diversity across thermal gradients
@@ -247,10 +247,10 @@ rd_aggregate_tb <- final_rd %>%
   # 'na.rm = T' ensures that NA values are ignored during the mean calculation
   summarise(across(dissimilarity_ross:sd_ffd, mean, na.rm = T)) %>% 
   # Join the summarised data with the 'result' data frame using a left join
-  left_join(result)
+  left_join(result) %>% 
+  # Temp 25 only has zug and maggiore so remove
+  filter(temp_bin != 'temp_25')
 
-# Temp 25 only has zug and maggiore so remove
-rd_aggregate_tb <- rd_aggregate_tb %>% filter(temp_bin != 'temp_25')
 
 # Define the variables to use instead of `lake_richness`
 richness_vars <- c("lake_richness", "endemic", "native", "endemic_intro", "native_intro", "non_native")  
@@ -445,6 +445,9 @@ plot_data_phos <- rd_aggregate_tb %>%
   pivot_longer(cols = dissimilarity_ross:sd_ffd, names_to = "dissimilarity_type", values_to = "diss_value")%>% 
          left_join(rd_corvalues)
 
+rd_corvalues %>% 
+  filter(richness_type == 'phos_max')
+
 
 plot_data_phos <- plot_data_phos %>% 
   ungroup() %>% 
@@ -452,7 +455,7 @@ plot_data_phos <- plot_data_phos %>%
                                        'dissimilarity_ross' = 'response dissimilarity',
                                        'divergence_ross' = 'response divergence',
                                        'sd_ffd' = 'response SD',
-                                       'mean_ffd' = 'response mean'), 
+                                       'mean_ffd' = 'response direction'), 
          temp_bin  = dplyr::recode(temp_bin, 
                                    'temp_05' = '2.5° to 7.5°',
                                    'temp_10' = '7.5° to 12.5°',
@@ -461,8 +464,9 @@ plot_data_phos <- plot_data_phos %>%
 
 plot_data_phos$dissimilarity_type <- factor(
   plot_data_phos$dissimilarity_type,
-  levels = sort(unique(plot_data_phos$dissimilarity_type))[c(1,4,2,3)]
+  levels = sort(unique(plot_data_phos$dissimilarity_type))[c(2,4,3,1)]
 )
+
 
 unique(plot_data_phos$temp_bin)
 plot_data_phos$temp_bin <- factor(
@@ -470,19 +474,68 @@ plot_data_phos$temp_bin <- factor(
   levels = sort(unique(plot_data_phos$temp_bin))[c(3,4,1,2)]
 )
 
+# Create a label for each facet
+facet_labels <- plot_data_phos %>%
+  group_by(dissimilarity_type, temp_bin) %>%
+  summarise(
+    estimate = unique(round(estimate, 2)),
+    p_value = unique(p_value),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    p_label = case_when(
+      p_value < 0.001 ~ "'***'",
+      p_value < 0.01 ~ "'**'",
+      p_value < 0.05 ~ "'*'",
+      TRUE ~ "' '"
+    ),
+    label = glue::glue("rho == {estimate}^{{{p_label}}}")
+  )
+
+
+facet_positions <- plot_data_phos %>%
+  group_by(dissimilarity_type) %>%
+  summarise(
+    x = max(richness_value, na.rm = TRUE),
+    y = max(diss_value, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+facet_labels <- left_join(facet_labels, facet_positions,
+                          by = c("dissimilarity_type"))
+
 phos_plot <- ggplot(data = plot_data_phos) + 
-    geom_point(aes(x = richness_value, y = diss_value)) + 
-  stat_smooth(aes(x = richness_value, y = diss_value, 
-                  lty = case_when(p_value < 0.05 ~ '1',  T ~ '2'), 
-                  fill = case_when(p_value < 0.05 ~ 'gray50',  T ~ 'void'), 
-                  col = estimate), 
-              method = 'lm') + 
-  facet_grid(dissimilarity_type~temp_bin, scales = 'free') + 
+  geom_point(aes(x = richness_value, y = diss_value)) + 
+  # Smooths where p < 0.05, show SE
+  stat_smooth(
+    data = plot_data_phos %>% filter(p_value < 0.05),
+    aes(x = richness_value, y = diss_value, 
+        lty = 1, fill = 'gray50', col = estimate),
+    method = 'lm',
+    lty = 1,
+    se = TRUE
+  ) +
+
+  # Smooths where p >= 0.05, hide SE
+  stat_smooth(
+    data = plot_data_phos %>% filter(p_value >= 0.05),
+    aes(x = richness_value, y = diss_value, 
+        col = estimate),
+    method = 'lm',
+    lty = 2,
+    se = FALSE
+  ) +
+  geom_text(data = facet_labels,
+            aes(x = x, y = y, label = label),
+            hjust = 1, vjust = 1, size = 3, fontface = "italic", 
+                      parse = TRUE) + 
+  facet_grid(dissimilarity_type ~ temp_bin, scales = 'free') + 
   my_custom_theme() + 
   scale_fill_manual(values = c('gray50', 'transparent')) + 
   scale_colour_gradient2() +
   ylab('Response metric') + 
   xlab('Maximum phosphorous')
+
 phos_plot
 ```
 
@@ -498,7 +551,7 @@ rd_corvalues_v2 <- rd_corvalues %>%
                                        'dissimilarity_ross' = 'response dissimilarity',
                                        'divergence_ross' = 'response divergence',
                                        'sd_ffd' = 'response SD',
-                                       'mean_ffd' = 'response mean'), 
+                                       'mean_ffd' = 'response direction'), 
          richness_type = dplyr::recode(richness_type, 
                                        'lake_richness' = 'all species',
                                        'native' = 'widespread native',
@@ -526,7 +579,7 @@ rd_corvalues_v2$temp_bin <- factor(
 
 rd_corvalues_v2$dissimilarity_type <- factor(
   rd_corvalues_v2$dissimilarity_type,
-  levels = sort(unique(rd_corvalues_v2$dissimilarity_type))[c(1,4,2,3)]
+  levels = sort(unique(rd_corvalues_v2$dissimilarity_type))[c(2,4,3,1)]
 )
 
 
@@ -568,12 +621,12 @@ my_custom_theme_V2 <- function() {
 png('figures/response_diversity_Figs/Richness_effect_dissimilarity.png', res = 600, width = 4000, height = 4000)
 ggplot(data = plot_data_RD %>%
          filter(dissimilarity_type == 'dissimilarity_ross', 
-                richness_type %in% levels(richness_type)[c(1,2,3)], 
+                richness_type %in% levels(richness_type)[c(1,2,3,4)], 
                 temp_bin %in% unique(temp_bin)[c(1,4)]) %>% 
          mutate(fill_condition = case_when(p_value < 0.05 & richness_type == 'widespread \n native' ~ '#C7C35E',
-                                           p_value < 0.05 & richness_type == 'in situ \n diversification (ISD)' ~ '#5C92C4',
+                                           p_value < 0.05 & richness_type == 'in situ \n diversification (ISD)' ~ '#3CB371',
+                                           p_value < 0.05 & richness_type == 'non-native' ~ 'purple',
                                            TRUE ~ 'white'))) +
-  geom_point(aes(x = richness_value, y = diss_value, col = richness_type)) +
   stat_smooth(
     aes(
       x = richness_value, y = diss_value,
@@ -584,48 +637,23 @@ ggplot(data = plot_data_RD %>%
     ),
     method = 'lm'
   ) +
-  facet_grid(temp_bin ~ richness_type, scales = 'free') + 
-  my_custom_theme_V2() + 
-  scale_fill_manual(values = c('gray50', 'transparent')) +
-  ylab('Response Dissimilarity') +
-  xlab('Species Richness') + 
-  scale_fill_manual(values = c("#5C92C4",  "#C7C35E", "white")) + 
-  scale_colour_manual(values = c("gray40",  "#C7C35E", "#5C92C4"))
-dev.off()
-
-png('figures/response_diversity_Figs/Richness_effect_divergence.png', res = 600, width = 4000, height = 4000)
-diss_data <- plot_data_RD %>%
-         filter(dissimilarity_type == 'divergence_ross', 
-                richness_type %in% levels(richness_type)[c(1,2,3)], 
-                temp_bin %in% unique(temp_bin)[c(1,4)]) %>% 
-         mutate(fill_condition = case_when(p_value < 0.05 & richness_type == 'widespread \n native' ~ '#C7C35E',
-                                           p_value < 0.05 & richness_type == 'in situ \n diversification (ISD)' ~ '#5C92C4',
-                                           p_value < 0.05 & richness_type == 'all species' ~ 'gray40',
-                                           TRUE ~ 'white'))
-ggplot(data = diss_data) +
   geom_point(aes(x = richness_value, y = diss_value, col = richness_type)) +
-  stat_smooth(
-    aes(
-      x = richness_value, y = diss_value,
-      col = richness_type,
-      lty = case_when(p_value < 0.05 ~ '1', TRUE ~ '2'),
-      fill = fill_condition,
-      group = paste0(richness_type, temp_bin)
-    ),
-    method = 'lm'
-  ) +
   facet_grid(temp_bin ~ richness_type, scales = 'free') + 
   my_custom_theme_V2() + 
-  scale_fill_manual(values = c('gray50', 'transparent')) +
+  #scale_fill_manual(values = c('gray50', 'transparent')) +
   ylab('Response Dissimilarity') +
   xlab('Species Richness') + 
-  scale_fill_manual(values = c("#C7C35E","gray40", "white")) + 
-  scale_colour_manual(values = c("gray40",  "#C7C35E", "#5C92C4"))
+  scale_fill_manual(values = c("#3CB371",  "#C7C35E", "transparent", 'purple')) + 
+  scale_colour_manual(values = c("gray40",  "#C7C35E", "#3CB371", 'purple'))
 dev.off()
 
 # Plot all richness ~ response diversity summaries
-png('figures/response_diversity_Figs/Richness_effect_all.png', res = 600, width = 5000, height = 2250)
-overall_plot
+png('figures/response_diversity_Figs/Richness_effect_all.png', res = 600, width = 5000, height = 1750)
+overall_plot + 
+  xlab('Temperature strata') + 
+  ylab(NULL) + 
+  theme(legend.position = 'right') + 
+  scale_fill_gradient2(name = bquote(cor.))
 dev.off()
 
 ### Phosphorous effect

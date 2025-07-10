@@ -38,7 +38,10 @@ pacman::p_load(
   mgcv,
   gratia,
   mgcViz, 
-  data.table
+  data.table, 
+  ggrepel, 
+  cowplot, 
+  patchwork
 )
 
 ```
@@ -144,7 +147,7 @@ ggplot(data = all_response_div %>%
 # Dissimilarity
 diss_plot <- ggplot(data = all_response_div %>% 
          filter(k == 3, including_electro == T)) +
-  stat_smooth(aes(x = mean_last_7days, y = dissimilarity_ross, colour = as.character(lake), 
+  geom_line(aes(x = mean_last_7days, y = dissimilarity_ross, colour = as.character(lake), 
                 lty = including_electro), se = F, lwd = 0.5)  + 
   stat_smooth(aes(x = mean_last_7days, y = dissimilarity_ross, 
                 lty = including_electro), se = F, col = 'black', lwd = 2) + 
@@ -158,7 +161,7 @@ diss_plot <- ggplot(data = all_response_div %>%
 # Divergence
 div_plot <- ggplot(data = all_response_div %>% 
          filter(k == 3, including_electro == T)) +
-  stat_smooth(aes(x = mean_last_7days, y = divergence_ross, colour = as.character(lake), 
+  geom_line(aes(x = mean_last_7days, y = divergence_ross, colour = as.character(lake), 
                 lty = including_electro), se = F, lwd = 0.5)  + 
   stat_smooth(aes(x = mean_last_7days, y = divergence_ross, 
                 lty = including_electro), se = F, col = 'black', lwd = 2) + 
@@ -172,7 +175,7 @@ div_plot <- ggplot(data = all_response_div %>%
 # SD derivs
 sd_plot <- ggplot(data = all_response_div %>% 
          filter(k == 3, including_electro == T)) +
-  stat_smooth(aes(x = mean_last_7days, y = sd_ffd, colour = as.character(lake), 
+  geom_line(aes(x = mean_last_7days, y = sd_ffd, colour = as.character(lake), 
                 lty = including_electro), se = F, lwd = 0.5)  + 
   stat_smooth(aes(x = mean_last_7days, y = sd_ffd, 
                 lty = including_electro), se = F, col = 'black', lwd = 2) + 
@@ -188,7 +191,7 @@ sd_plot <- ggplot(data = all_response_div %>%
 # Mean derivs
 mean_plot <- ggplot(data = all_response_div %>% 
          filter(k == 3, including_electro == T)) +
-  stat_smooth(aes(x = mean_last_7days, y = mean_ffd, colour = as.character(lake), 
+  geom_line(aes(x = mean_last_7days, y = mean_ffd, colour = as.character(lake), 
                 lty = including_electro), se = F, lwd = 0.5)  + 
   stat_smooth(aes(x = mean_last_7days, y = mean_ffd, 
                 lty = including_electro), se = F, col = 'black', lwd = 2) + 
@@ -198,7 +201,7 @@ mean_plot <- ggplot(data = all_response_div %>%
         aspect.ratio = 1, 
         panel.grid = element_blank()) + 
   xlab('Temperature') + 
-  ylab('Response mean')
+  ylab('Response direction')
 
 
 library(cowplot)
@@ -210,6 +213,57 @@ dev.off()
 
 ```
 
+# Lake metadata and species occurrence information
+
+```{r}
+
+# lake metadata
+lake_meta <- read_xlsx('data/lake_info.xlsx') %>% 
+  select(Lake, Drainage, Altitude, Lake_area, Lake_volume, Max_depth, contains('Phos_')) %>% 
+  janitor::clean_names() %>% 
+  mutate(across(contains('phos_'), as.numeric)) %>% 
+  mutate(lake = case_when(lake %in% c('ConstanceObersee', 'ConstanceUntersee') ~ 'Constance',
+                          lake %in% c('ZurichObersee', 'ZurichUntersee') ~ 'Zurich',
+                          T ~ lake))
+
+# summarise where no information in subbasin
+lake_meta <- lake_meta %>% 
+  group_by(lake) %>% 
+  summarise(across(is.numeric, max, na.rm = T)) 
+
+
+# information about categorization in each lake for the subgroups per lake
+# get per lake biogeographic affinity
+biogeography_swisswide <- read_csv("data/taxonomy_May2025/species_lake_list_raw_EDITED.csv") %>% 
+  select(Species_ecotype, Lake, Swisswide_biogeographic_status, Lake_biogeographic_status) %>% 
+  rename(lake = Lake, sbs = Swisswide_biogeographic_status, lbs = Lake_biogeographic_status) %>% 
+  unique() %>% 
+  filter(lbs != 'remove') %>% 
+  mutate(lbs_intro = case_when(sbs == 'native' & lbs == 'non_native' ~ 'native_intro', 
+                               sbs == 'endemic' & lbs == 'non_native' ~ 'endemic_intro', 
+                               T ~ lbs))
+
+# biogeography_swisswide %>% print(n = 500)
+
+# lake richness
+lake_richness <- biogeography_swisswide %>% 
+  group_by(lake) %>% 
+  summarise(lake_richness = n_distinct(Species_ecotype))
+
+# group richness
+group_richness <- biogeography_swisswide %>% 
+  group_by(lake, lbs_intro) %>% 
+  summarise(lake_richness = n_distinct(Species_ecotype)) %>% 
+  pivot_wider(values_from = lake_richness, names_from = lbs_intro, values_fill = 0) %>% 
+  ungroup()
+  
+
+
+# join lake and group richness to response diversity data
+result <- reduce(list(lake_meta, lake_richness, group_richness), ~ left_join(.x, .y, by = "lake"))
+
+
+```
 
 # Plots of average response diversity across whole lake
 
@@ -234,29 +288,40 @@ rd_aggregate <- final_rd %>%
 # generalized function to plot variables by choice
 plot_lake_relationship <- function(data, xvar, yvar) {
 
- browser()
- COR <- cor.test(y = data[[yvar]], x = data[[xvar]], method = 'spearman')
- COR$p.value
- print(COR)
+  # Compute Spearman correlation
+  COR <- cor.test(y = data[[yvar]], x = data[[xvar]], method = 'spearman')
+
+  # Extract and format stats
+  rho <- round(as.numeric(COR$estimate), 2)
+  pval <- signif(COR$p.value, 2)
+  
+  # Standard significance label
+  p_sig <- case_when(
+    COR$p.value <= 0.001 ~ "p < 0.001",
+    COR$p.value <= 0.01  ~ "p < 0.01",
+    COR$p.value <= 0.05  ~ "p < 0.05",
+    TRUE          ~ "p > 0.05"
+  )
+  
+  # Calculate axis ranges
+  x_max <- min(data[[xvar]], na.rm = TRUE)
+  y_max <- max(data[[yvar]], na.rm = TRUE)
 
   ggplot(data = data) + 
     stat_smooth(aes(x = .data[[xvar]], y = .data[[yvar]]), 
                 method = 'lm', alpha = 0.5, col = 'gray20', fill = 'gray80', 
                 lty = case_when(COR$p.value < 0.05 ~ 1, T ~ 2),
-                se = case_when(COR$p.value < 0.05 ~ T, T ~ F)) + 
+                se  = case_when(COR$p.value < 0.05 ~ F, T ~ F)) + 
     geom_text_repel(aes(x = .data[[xvar]], y = .data[[yvar]], label = lake, col = lake), max.overlaps = 5) + 
     geom_point(aes(x = .data[[xvar]], y = .data[[yvar]], col = lake)) + 
-    geom_label("label",
-           x = min(data[[xvar]], na.rm = TRUE),
-           y = max(data[[yvar]], na.rm = TRUE),
-           label = bquote(rho == .(round(as.numeric(COR$estimate), 2))),
-           fill = "white")  +
     theme_bw() + 
     theme(
       aspect.ratio = 1, 
       panel.grid = element_blank(),
-      legend.position = 'none'
-    )
+      legend.position = 'none',
+      plot.title = element_text(size = 12) 
+    ) + 
+    ggtitle(paste0("ρ = ", rho, ", ", p_sig))
 }
 
 
@@ -264,7 +329,7 @@ plot_lake_relationship <- function(data, xvar, yvar) {
 rich_diss    <- plot_lake_relationship(rd_aggregate, 'lake_richness', 'dissimilarity_ross') + ylab('Response dissimilarity') + xlab('Species richness') 
 rich_div     <- plot_lake_relationship(rd_aggregate, 'lake_richness', 'divergence_ross') + ylab('Response divergence') + xlab('Species richness') 
 rich_sdffd   <- plot_lake_relationship(rd_aggregate, 'lake_richness', 'sd_ffd') + ylab('Response SD') + xlab('Species richness') 
-rich_meanffd <- plot_lake_relationship(rd_aggregate, 'lake_richness', 'mean_ffd') + ylab('Response mean') + xlab('Species richness') 
+rich_meanffd <- plot_lake_relationship(rd_aggregate, 'lake_richness', 'mean_ffd') + ylab('Response direction') + xlab('Species richness') 
 png('figures/response_diversity_summaries/richness_wholeLake.png', res = 300, width = 4000, height = 3000)
 print(plot_grid(rich_diss, 
                 rich_div, 
@@ -277,15 +342,17 @@ dev.off()
 # combine together aggregated richness with across-gradient plot
 ```{r}
 
-png('figures/response_diversity_summaries/temp_richness_wholeLake.png', res = 600, width = 4000, height = 8000)
-plot_grid(rich_diss, 
-          rich_sdffd,
-          rich_div, 
-          rich_meanffd, ncol = 1) |
-plot_grid(diss_plot + ylab('   '),
-          sd_plot+ ylab('   '), 
-          div_plot+ ylab('   '),
-          mean_plot+ ylab('   '), ncol = 1) + 
+png('figures/response_diversity_summaries/temp_richness_wholeLake.png', res = 600, width = 7000, height = 4000)
+plot_grid(diss_plot ,
+          sd_plot , 
+          div_plot ,
+          mean_plot , 
+          ncol = 4) / 
+  plot_grid(rich_diss, 
+            rich_sdffd,
+            rich_div, 
+            rich_meanffd ,
+            ncol = 4) + 
 plot_layout(guides = "collect")
 dev.off()
 

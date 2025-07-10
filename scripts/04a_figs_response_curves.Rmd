@@ -44,8 +44,11 @@ pacman::p_load(
 
 ```{r}
 
+files <- list.files('outputs', pattern = 'temperature_predictions.RDS', full.names = T, recursive = T)
+
+files[grepl('run_01052025_electro', files)]
 # read in modelled response curves
-all_preds <- bind_rows(lapply(list.files('outputs', pattern = 'temperature_predictions.RDS', full.names = T, recursive = T), readRDS))
+all_preds <- bind_rows(lapply(files[grepl('run_01052025_electro', files)], readRDS))
 
 # get swiss wide biogeographic affinity
 biogeography_swisswide <-  read_csv("data/taxonomy_May2025/species_lake_list_raw_EDITED.csv") %>% 
@@ -90,7 +93,7 @@ ggplot(data = focal_scenario %>% unique(),
         legend.position = 'none', 
         aspect.ratio = 1) +
   facet_wrap(~Swisswide_biogeographic_status) + 
-  scale_colour_manual(values =rev(c("#C75E5E",  "#C7C35E", "#5C92C4")))
+  scale_colour_manual(values =rev(c("#C7C35E", 'purple', "#3CB371")))
 dev.off()
 
 
@@ -108,7 +111,7 @@ ggplot(data = focal_scenario %>% unique(),
         strip.background = element_blank(), 
         legend.position = 'none') +
   facet_wrap(~species) + 
-  scale_colour_manual(values = rev(c("#C75E5E",  "#C7C35E", "#5C92C4")))
+  scale_colour_manual(values =rev(c("#C7C35E", 'purple', "#3CB371")))
 dev.off()
 
 
