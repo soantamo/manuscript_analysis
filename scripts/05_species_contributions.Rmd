@@ -66,12 +66,46 @@ all_ffd_derivs <- all_ffd_derivs %>%
                                        T ~ ffd_per_0.1degree))
 
 # Read in species occurrences across lakes
-species_occ_lakes <-  read_csv("data/taxonomy_May2025/species_lake_list_raw_EDITED.csv") %>% 
+species_occ_lakes <- read_csv("data/taxonomy_May2025/species_lake_list_raw_EDITED.csv") %>% 
   select(Species_ecotype, Lake, Swisswide_biogeographic_status) %>% 
   unique() %>%
   rename(Species = Species_ecotype)
 
 ```
+
+## Format swiss biogeographic categorisation for saving as a table
+```{r}
+
+# Clean species names as in figures
+species_occ_lakes_v2 <- read_csv("data/taxonomy_May2025/species_lake_list_raw_EDITED.csv")
+
+# format for presenting in wide tale
+id_table <- species_occ_lakes_v2 %>% 
+  
+  # get columns of focus
+  dplyr::select(Species_ecotype, Lake, Lake_biogeographic_status) %>% 
+  filter(Lake_biogeographic_status != 'remove') %>% 
+  unique() %>%
+  rename(Species = Species_ecotype) %>% 
+
+  # revalue the levels of temperature bins
+  mutate(status = dplyr::recode(Lake_biogeographic_status, 
+                                       'native' = 'WN',
+                                       'endemic' = 'ISD',
+                                       'non_native' = 'NN'), 
+         Species = gsub('_', ' ', Species), 
+         fill = 'x') %>% 
+  
+  # remove old coding
+  select(-Lake_biogeographic_status) %>% 
+  
+  # pivot to shorten
+  pivot_wider(names_from = Lake, values_from = fill, values_fill = ' ')
+
+write_csv(id_table, 'figures/species_contributions/species_lake_table.csv')
+  
+```
+
 
 ## Calculate species level contributions at each temperature bin per lake
 
@@ -615,6 +649,14 @@ contri_biog_plots[[2]] + ggtitle('(b) response divergence')
 dev.off()
 
 
+png('figures/species_contributions/spContributions_biog_lake_temp_contributions_ALL.png', res = 300, height = 5000, width = 4000)
+contri_biog_plots[[1]] + ggtitle('(a) response dissimilarity') + 
+  contri_biog_plots[[4]] + ggtitle('(b) response SD') + 
+    contri_biog_plots[[2]] + ggtitle('(c) response divergence') + 
+contri_biog_plots[[3]] + ggtitle('(d) response direction')
+dev.off()
+
+
 ```
 
 
@@ -885,3 +927,152 @@ contri_biog_anova %>%
 ```
 
 
+# Testing variation within species 
+
+## Between lake variation in responses
+
+```{r}
+
+dir.create('figures/species_contributions/', recursive = T)
+
+# process biogeographic data per lake
+species_biog_lake <- read_csv("data/taxonomy_May2025/species_lake_list_raw_EDITED.csv") %>% 
+  select(Species_ecotype, Lake, Lake_biogeographic_status) %>% 
+  unique() %>%
+  rename(Species = Species_ecotype) %>% 
+  filter(Lake_biogeographic_status != 'remove', 
+         !is.na(Lake_biogeographic_status))
+
+# Read in the original response diversity information
+response_diversity <- readRDS('data/response_diversity.rds')
+
+# rename 
+response_diversity <- response_diversity %>% 
+  rename(diss_com = dissimilarity_ross, 
+         div_com = divergence_ross, 
+         mean_com = mean_ffd, 
+         sd_com = sd_ffd)
+
+# Load the data.table containing species contributions
+sp_con_rd <- readRDS('data/species_contributions_respdiv.rds')
+
+# get response diversity contributions compared with including species
+contributions_full <- left_join(sp_con_rd, response_diversity) %>% 
+  filter(!is.na(div_com)) %>% 
+  # contributions are positive if when you drop the species you lose rd 
+  mutate(diss_contr = diss_com - dissimilarity_ross, 
+         div_contr = div_com - divergence_ross, 
+         mean_contr = mean_com - mean_ffd,
+         sd_contr = sd_com - sd_ffd) %>% 
+  as_tibble()
+
+# aggregate as mean for each lake and species
+contributions_net <-contributions_full %>% 
+  as_tibble() %>% 
+  group_by(species_dropped, lake) %>% 
+  summarise(across(diss_contr:sd_contr, c(meanLS = mean, sdLS = sd)))
+
+
+# namving convention for tidier aovs
+cn <- c('species' = 'species_dropped', 'lake' = 'lake',  'temperature' = 'temp_bin', 'biogeography' = 'Lake_biogeographic_status')
+
+# add in temperature and biogeography
+contributions_biog_temp <-  left_join(sp_con_rd, response_diversity) %>%
+  
+  # join in biogeographic status at species and lake scale
+  left_join(., species_biog_lake %>% unique(), by = c('species_dropped' = 'Species', 'lake' = 'Lake')) %>% 
+  
+  # remove communities without estimates
+  filter(!is.na(div_com), !is.na(Lake_biogeographic_status)) %>% 
+  
+  # contributions are positive if when you drop the species you lose rd 
+  mutate(diss_contr = diss_com - dissimilarity_ross, 
+         div_contr = div_com - divergence_ross, 
+         mean_contr = mean_com - mean_ffd,
+         sd_contr = sd_com - sd_ffd) %>% 
+  as_tibble() %>% 
+  
+  # Create temperature bins 
+  mutate(temp_bin = paste0('temp_', sprintf("%02d", plyr::round_any(mean_last_7days, accuracy = 5)))) %>% 
+  
+  # clean up names for saving aov
+  rename(cn) 
+
+
+# clean names
+vn <- c('diss_contr' = 'dissimilarity', 
+        'div_contr' = 'divergence', 
+        'mean_contr' = 'direction', 
+        'sd_contr' = 'SD')
+
+# testing
+#var <- 'diss_contr'
+
+# calculate the analysis of variance across all RD responses
+aov_sp_contri <- lapply(names(vn), function(var){
+  
+  var_diff <- setdiff(names(cn), 'species')
+  
+  fmla <- as.formula(paste(var, "~ species + (", paste(var_diff, collapse = " + "), ")^2"))
+
+  # calculate the mean response in a lake and estimate variaton across lakes
+  lm(fmla, 
+     data = contributions_biog_temp) %>% 
+    aov %>% 
+    broom::tidy() %>% 
+    mutate(across(c(sumsq, meansq, statistic), signif, digits = 2), 
+           p.value = case_when(p.value < 0.001 ~ "<0.001",
+                               p.value < 0.01 ~ "<0.01",
+                               p.value < 0.05 ~ "<0.05",
+                               TRUE ~ as.character(round(p.value, 2)),
+                               )) %>% 
+    # process sum of squares
+    mutate(# Proportion of sum of squares
+      prop_sumsq = signif(sumsq / sum(sumsq, na.rm = TRUE), 2),
+      # Proportion of mean sum of squares
+      prop_meansq = signif(meansq / sum(meansq, na.rm = TRUE), 2), 
+      response = vn[names(vn) %in% var]) %>% 
+    # related response to first column
+    relocate(response) %>% 
+    # print output for evaluation in line
+    {print(.); .} %>%
+    # save output
+    {write_csv(., file = paste0('figures/species_contributions/', vn[names(vn) %in% var], '_aov.csv')); .}
+    
+})
+
+# return objects and save as large table 
+
+bind_rows(aov_sp_contri) %>% 
+  relocate(prop_sumsq, .after = sumsq) %>% 
+  relocate(prop_meansq, .after = meansq) %>% 
+  write_csv(., file = 'figures/species_contributions/all_aov.csv')
+
+
+# comparing between lakes - what % of species had both positive and negative contributions
+contributions_biog_temp %>% 
+  group_by(species, lake) %>% 
+  summarise(across(contains('_contr'), mean)) %>% 
+  ungroup() %>% 
+  group_by(species) %>% 
+  summarise(across(diss_contr:sd_contr, function(x){if_else(length(unique(na.omit(sign(x)))) == 2, T, F)})) %>% 
+  ungroup() %>% 
+  summarise(across(contains('_'), function(x) (sum(x) / 52)*100))
+spContributions_biog_lake_temp_contributions
+# comparing within a lake - what % of species had both positive and negative contributions
+contributions_biog_temp %>% 
+  group_by(species, lake) %>% 
+  summarise(across(diss_contr:sd_contr, function(x){if_else(length(unique(na.omit(sign(x[x!=0])))) == 2, T, F)})) %>% 
+  ungroup() %>% 
+  group_by(lake) %>% 
+  summarise(across(contains('_'), function(x) (sum(x) / length(x))*100)) %>% 
+  {print(.); .} %>% 
+  ungroup() %>% 
+  summarise(across(contains('_'), list(m = mean, sd = sd))) %>% 
+  t
+
+```
+
+
+
+## Mean variation within a lake (across temperature bands)
