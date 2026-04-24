@@ -507,6 +507,165 @@ species_tempbin_agg_plots_sd <- lapply(c('diss_contr_sdLSD', 'div_contr_sdLSD', 
 
 ```
 
+
+# Join in biogeographic realms of species and plot with faceted realms
+
+```{r}
+
+# process biogeographic data per lake
+species_biog_lake <- read_csv("data/taxonomy_May2025/species_lake_list_raw_EDITED.csv") %>% 
+  select(Species_ecotype, Lake, Lake_biogeographic_status) %>% 
+  unique() %>%
+  rename(Species = Species_ecotype) %>% 
+  filter(Lake_biogeographic_status != 'remove', 
+         !is.na(Lake_biogeographic_status))
+
+# aggregation of response contributions over biogeographic status
+contri_biog_data <- 
+  
+  # join together species contributions and overall community response diversity
+  left_join(sp_con_rd, response_diversity) %>%
+  
+  # join in biogeographic status at species and lake scale
+  left_join(., species_biog_lake %>% unique(), by = c('species_dropped' = 'Species', 'lake' = 'Lake')) %>% 
+  
+  # remove communities without estimates
+  filter(!is.na(div_com), !is.na(Lake_biogeographic_status)) %>% 
+  
+  # contributions are positive if when you drop the species you lose rd 
+  mutate(diss_contr = diss_com - dissimilarity_ross, 
+         div_contr = div_com - divergence_ross, 
+         mean_contr = mean_com - mean_ffd,
+         sd_contr = sd_com - sd_ffd) %>% 
+  as_tibble() %>% 
+  
+  # Create temperature bins 
+  mutate(temp_bin = paste0('temp_', sprintf("%02d", plyr::round_any(mean_last_7days, accuracy = 5)))) %>% 
+  
+  # Group the data by the 'lake' column
+  group_by(species_dropped, temp_bin) %>% 
+  
+  # For all columns from 'dissimilarity_ross' to 'sd_ffd', compute the mean
+  # 'na.rm = T' ensures that NA values are ignored during the mean calculation
+  summarise(across(diss_contr:sd_contr, c(meanLSDB = ~ mean(.x, na.rm = TRUE), sdLSDB = ~ sd(.x, na.rm = TRUE)))) %>% 
+  
+  # Remove temperature bin with very few species
+  filter(temp_bin != 'temp_25') %>% 
+  
+  # join in swiss wide status
+  left_join(., species_occ_lakes %>% select(-Lake) %>% unique(), by = c('species_dropped' = 'Species')) %>% 
+  
+  # remove underscores from species names
+  mutate(species_dropped = gsub('_', ' ', species_dropped)) %>% 
+  
+  # revalue the levels of temperature bins
+  mutate(
+         temp_bin  = factor(dplyr::recode(temp_bin, 
+                                   'temp_05' = '2.5 to 7.5°C',
+                                   'temp_10' = '7.5 to 12.5°C',
+                                   'temp_15' = '12.5 to 17.5°C',
+                                   'temp_20' = '17.5 to 22.5°C'),
+                            levels = c('2.5 to 7.5°C', '7.5 to 12.5°C', '12.5 to 17.5°C', '17.5 to 22.5°C')))
+
+
+## Create funtion to plot
+pacman::p_load(ggtext)  # enables colored axis labels
+
+species_depth_biog_heatmap <- function(var, data_set){
+  
+  # limits
+  if(var == 'div_contr_meanLSDB'){lim <- max(abs(c(data_set %>% pull(get(var)) %>% quantile(., 0.1, na.rm = T), data_set %>% pull(get(var)) %>% quantile(., 0.9, na.rm = T))))}else{
+    
+    lim <- max(abs(c(data_set %>% pull(get(var)) %>% quantile(., 0.05, na.rm = T), data_set %>% pull(get(var)) %>% quantile(., 0.95, na.rm = T))))}
+  
+  # Step 1: reorder species_dropped based on species_mean
+data_set <- data_set %>%
+  group_by(species_dropped) %>%
+  mutate(species_mean = mean(get(var), na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(
+    species_dropped = fct_reorder(species_dropped, species_mean)
+  )
+
+# Step 2: create species_label and apply the same factor levels
+data_set <- data_set %>%
+  mutate(
+    status_symbol = case_when(
+      Swisswide_biogeographic_status == "endemic" ~ "&#9733;",      # ★
+      Swisswide_biogeographic_status == "non_native" ~ "&#9830;",   # ♦
+      TRUE ~ "--"  # No symbol for others
+    ),
+    species_label_text = paste0(
+      "<span style='color:",
+      ifelse(.data$Swisswide_biogeographic_status == "endemic", "#3CB371",
+      ifelse(.data$Swisswide_biogeographic_status == "non_native", "purple", "#C7C35E")),
+      "'>", species_dropped, '  ', status_symbol, "</span>"
+    ),
+    # 🧠 Make this a factor with the same order as species_dropped
+    species_label = factor(species_label_text, levels = unique(species_label_text[order(species_dropped)]))
+  )
+
+  
+  ggplot(data_set) + 
+    geom_tile(aes(y = species_label, x = temp_bin, fill = get(var))) + 
+    scale_fill_gradient2(
+      name = NULL, 
+      mid = "gray90",
+      midpoint = 0, limits = c(-lim, lim), oob = scales::squish
+    ) +
+    theme_bw() +
+    theme(
+      panel.grid = element_blank(),
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      axis.ticks.y = element_blank(),
+      strip.background = element_blank(),
+      strip.text = element_text(hjust = 0),
+      
+      # ✅ enable rich text formatting for y-axis
+      axis.text.y = element_markdown()
+    ) +
+    ylab(NULL) +
+    xlab(NULL)
+}
+
+contri_biog_plots <- lapply(c('diss_contr_meanLSDB', 'div_contr_meanLSDB', 
+                                           'mean_contr_meanLSDB', 'sd_contr_meanLSDB'), 
+       function(x) species_depth_biog_heatmap(x, contri_biog_data))
+
+contri_biog_plots[[1]]
+contri_biog_plots[[3]]
+
+contri_biog_plots[[2]] + ggtitle('(a) Divergence')  +
+contri_biog_plots[[4]] + ggtitle('(b) SD response')
+
+png('figures/species_contributions/spContributions_biog_lake_temp_contributions.png', res = 300, height = 2300, width = 4000)
+contri_biog_plots[[4]] + ggtitle('(a) response SD') + 
+contri_biog_plots[[2]] + ggtitle('(b) response divergence')
+dev.off()
+
+
+png('figures/species_contributions/spContributions_biog_lake_temp_contributions_ALL.png', res = 300, height = 5000, width = 4000)
+contri_biog_plots[[1]] + ggtitle('(a) response dissimilarity') + 
+  contri_biog_plots[[4]] + ggtitle('(b) response SD') + 
+    contri_biog_plots[[2]] + ggtitle('(c) response divergence') + 
+contri_biog_plots[[3]] + ggtitle('(d) response direction')
+dev.off()
+
+png('figures/species_contributions/spContributions_lake_temp_contributions_SD.png', res = 300, height = 2000, width = 1700)
+contri_biog_plots[[4]] + theme(aspect.ratio = 4)
+dev.off()
+
+png('figures/species_contributions/spContributions_lake_temp_contributions_Div.png', res = 300, height = 2000, width = 1700)
+contri_biog_plots[[2]]+ theme(aspect.ratio = 4)
+dev.off()
+
+png('figures/species_contributions/spContributions_lake_temp_contributions_Dir.png', res = 300, height = 2000, width = 1700)
+contri_biog_plots[[3]]+ theme(aspect.ratio = 4)
+dev.off()
+
+
+```
+
 # Join in biogeographic realms of species and plot with faceted realms
 
 ```{r}
@@ -656,6 +815,9 @@ contri_biog_plots[[1]] + ggtitle('(a) response dissimilarity') +
 contri_biog_plots[[3]] + ggtitle('(d) response direction')
 dev.off()
 
+png('figures/species_contributions/spContributions_biog_lake_temp_contributions_SD.png', res = 300, height = 2000, width = 1700)
+contri_biog_plots[[4]]
+dev.off()
 
 ```
 
@@ -832,7 +994,7 @@ boxplot_sp_contr <- ggplot(data = contri_biog_anova_stats %>%
                position = position_dodge(width = 0.75), 
                outlier.color = 'gray80', 
                outlier.alpha = 1, 
-               outlier.size = 1.5, 
+               outlier.size = 1, 
                outlier.shape = 19, 
                outlier.stroke = 1) +
   
@@ -877,7 +1039,7 @@ my_custom_theme <- function() {
 }
 
 # save figure
-png("figures/species_contributions/boxplot_contributions_biogeography.png", res = 600, width = 6000, height = 3000)
+png("figures/species_contributions/boxplot_contributions_biogeography.png", res = 600, width = 5000, height = 2500)
 boxplot_sp_contr + my_custom_theme()
 dev.off()
 
