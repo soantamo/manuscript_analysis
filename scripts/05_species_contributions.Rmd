@@ -512,6 +512,8 @@ species_tempbin_agg_plots_sd <- lapply(c('diss_contr_sdLSD', 'div_contr_sdLSD', 
 
 ```{r}
 
+
+
 # process biogeographic data per lake
 species_biog_lake <- read_csv("data/taxonomy_May2025/species_lake_list_raw_EDITED.csv") %>% 
   select(Species_ecotype, Lake, Lake_biogeographic_status) %>% 
@@ -565,7 +567,14 @@ contri_biog_data <-
                                    'temp_10' = '7.5 to 12.5°C',
                                    'temp_15' = '12.5 to 17.5°C',
                                    'temp_20' = '17.5 to 22.5°C'),
-                            levels = c('2.5 to 7.5°C', '7.5 to 12.5°C', '12.5 to 17.5°C', '17.5 to 22.5°C')))
+                            levels = c('2.5 to 7.5°C', '7.5 to 12.5°C', '12.5 to 17.5°C', '17.5 to 22.5°C'))) %>% 
+  
+  # change coregonus sp to spp
+  mutate(species_dropped = case_when(grepl('Coregonus sp', species_dropped) ~ gsub('Coregonus sp', 'Coregonus spp', species_dropped), 
+                                     grepl('Salvelinus sp', species_dropped) ~ gsub('Salvelinus sp', 'Salvelinus spp', species_dropped),
+                                     T ~ species_dropped), 
+         species_dropped = case_when(grepl('Salvelinus spp', species_dropped, fixed = T) ~ 'Salvelinus sp', 
+                                     T ~ species_dropped))
 
 
 ## Create funtion to plot
@@ -629,7 +638,7 @@ data_set <- data_set %>%
 }
 
 contri_biog_plots <- lapply(c('diss_contr_meanLSDB', 'div_contr_meanLSDB', 
-                                           'mean_contr_meanLSDB', 'sd_contr_meanLSDB'), 
+                              'mean_contr_meanLSDB', 'sd_contr_meanLSDB'), 
        function(x) species_depth_biog_heatmap(x, contri_biog_data))
 
 contri_biog_plots[[1]]
@@ -663,6 +672,21 @@ png('figures/species_contributions/spContributions_lake_temp_contributions_Dir.p
 contri_biog_plots[[3]]+ theme(aspect.ratio = 4)
 dev.off()
 
+
+
+## what do species contributions against eachother look like across metrics
+
+contri_biog_data %>% 
+  dplyr::select(species_dropped, temp_bin, sd_contr_meanLSDB, div_contr_meanLSDB, Swisswide_biogeographic_status ) %>% 
+  ggplot(data = . ) + 
+  geom_point(aes(x = sd_contr_meanLSDB, y = div_contr_meanLSDB, col = Swisswide_biogeographic_status)) + 
+  theme_bw() + 
+  theme(aspect.ratio = 1, 
+        panel.grid = element_blank()) + 
+  geom_hline(aes(yintercept = 0)) + 
+  geom_vline(aes(xintercept = 0)) + 
+  ylab('Response divergence') + 
+  xlab('Response diversity (SD)')
 
 ```
 

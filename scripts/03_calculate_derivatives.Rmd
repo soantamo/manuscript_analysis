@@ -52,7 +52,14 @@ First step is to read in all the models and temperature predictions - for each p
 ```{r}
 
 # get all files, read, bind
-all_temp_preds <- bind_rows(lapply(list.files('outputs', pattern = 'temperature_predictions.RDS', recursive = T, full.names = T), readRDS))
+all_temp_preds <- bind_rows(
+  lapply(
+    list.files('outputs', 
+               pattern = 'temperature_predictions.RDS', 
+               recursive = T, 
+               full.names = T), 
+    readRDS)[2:7]# filter out the depth_test - data not the same structure
+  )
 
 all_ffd_derivs <- all_temp_preds %>% 
   group_by(name, k, including_electro) %>% 

@@ -1,6 +1,8 @@
 #######refining errors in species' identity that were noticed upon examination of the
 # data frame, following the table 16 in the Projet Lac "Synthesis report"
 
+pacman::p_load(tidyverse, readxl)
+
 species_occ_lakes <- read_xlsx('data/species_occurrences_lakes.xlsx')
 
 # C. brienzii should not be present in lake Thun, add to Coregonus sp.
